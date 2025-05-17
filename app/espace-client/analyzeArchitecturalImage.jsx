@@ -12,43 +12,16 @@ export async function analyzeArchitecturalImage(imageBase64) {
       ? imageBase64.split("base64,")[1]
       : imageBase64
 
-    const systemPrompt = `## MISSION ##
-Vous êtes un analyseur d'images architecturales automatisé.
-Votre SEULE ET UNIQUE fonction est d'extraire des observations et des solutions d'une image fournie et de les retourner sous forme d'un objet JSON STRICT.
-NE PAS ENGAGER DE CONVERSATION. NE PAS FOURNIR D'EXPLICATIONS. NE PAS UTILISER DE PHRASES COMPLÈTES EN DEHORS DES VALEURS JSON.
-
-## LANGUE DE SORTIE ##
-Tous les champs textuels (titres, descriptions) dans le JSON DOIVENT être en FRANÇAIS.
-
-## FORMAT DE SORTIE JSON OBLIGATOIRE ##
-L'objet JSON doit impérativement suivre cette structure (NE PAS inclure les commentaires // dans le JSON final) :
-{
-  "descriptionImageOriginale": "Description en français de l'image originale.",
-  "problems": [
-    {
-      "title": "Titre du problème en français",
-      "description": "Description détaillée du problème en français",
-      "severity": "high" // ou "medium" ou "low"
-    }
-    // ... autres problèmes si détectés
-  ],
-  "solutions": [
-    {
-      "title": "Titre de la solution en français",
-      "description": "Description détaillée de la solution en français",
-      "cost": "high" // ou "medium" ou "low",
-      "implementationTime": "jours" // ou "semaines" ou "mois",
-      "impact": "high" // ou "medium" ou "low"
-    }
-    // ... autres solutions si proposées
-  ]
-}
-
-## INSTRUCTIONS IMPORTANTES ##
-1. Si aucun problème ou solution n'est détecté, retournez les tableaux "problems" et "solutions" vides : [].
-2. Votre réponse COMPLÈTE doit commencer par '{' et se terminer par '}'. Aucun caractère en dehors.`
-
-    const userPrompt = "Image fournie pour analyse JSON." // Très neutre pour éviter toute confusion de dialogue.
+    const userPrompt = `S'il vous plaît, analysez attentivement l'image architecturale ci-jointe.\nFournissez votre analyse intégralement en FRANÇAIS et sous la forme d'un objet JSON.\nCet objet JSON doit contenir les clés suivantes :\n1. 
+     "descriptionImageOriginale": une chaîne de caractères décrivant brièvement l'image.\n2. 
+      "problems": un tableau d'objets. Chaque objet doit avoir les clés "title" (chaîne),
+       "description" (chaîne), et "severity" (valeurs possibles : "faible", "moyen", "élevé"). Si aucun problème n'est identifié, ce doit être un tableau vide [].\n3.  
+       "solutions": un tableau d'objets. Chaque objet doit avoir les clés "title" (chaîne), "description" (chaîne), "cost" (valeurs : "faible", "moyen", "élevé"),
+        "implementationTime" (valeurs : "jours", "semaines", "mois"), et "impact" (valeurs : "faible", "moyen", "élevé"). Si aucune solution n'est identifiée, ce doit être un tableau vide [].\n\nVotre réponse doit être UNIQUEMENT l'objet JSON.
+         N'ajoutez aucun texte explicatif avant ou après l'objet JSON.\nPar exemple, 
+         un problème pourrait être : { "title": "Isolation thermique", "description": "Les fenêtres semblent anciennes et pourraient causer des pertes de chaleur.", 
+         "severity": "moyen" }\nUne solution pourrait être : { "title": "Remplacer les fenêtres", "description": "Installer des fenêtres à double vitrage pour améliorer l'isolation.",
+          "cost": "élevé", "implementationTime": "semaines", "impact": "élevé" }\nAnalysez l'image et générez le JSON.`;
 
     const response = await together.chat.completions.create({
       model: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo",
@@ -56,15 +29,11 @@ L'objet JSON doit impérativement suivre cette structure (NE PAS inclure les com
       temperature: 0, // Pour une sortie déterministe et moins "créative"
       messages: [
         {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
           role: "user",
           content: [
             {
               type: "text",
-              text: userPrompt,
+              text: userPrompt, // This now refers to the comprehensive userPrompt defined above
             },
             {
               type: "image_url",
@@ -86,7 +55,7 @@ L'objet JSON doit impérativement suivre cette structure (NE PAS inclure les com
         console.log("Attempting to parse JSON:", jsonMatch[0]); // Log the JSON string before parsing
         analysisJson = JSON.parse(jsonMatch[0]);
       } else {
-        throw new Error("No valid JSON block found in the AI response. Response was: " + analysisText.substring(0, 100) + "...");
+        throw new Error("No valid JSON block found in the AI response. Response was: " + analysisText + "...");
       }
     } catch (parseError) {
       console.error("Error parsing AI response JSON:", parseError);
@@ -104,7 +73,7 @@ L'objet JSON doit impérativement suivre cette structure (NE PAS inclure les com
     console.error("Error analyzing image:", error)
     return {
       success: false,
-      error: error.message || "Failed to analyze image",
+      error: error.message || "Failed to analyze ima",
     }
   }
 }
