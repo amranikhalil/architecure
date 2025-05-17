@@ -1,221 +1,331 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import Link from "next/link"
-import { ArrowLeft, FileUp, Loader2 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Upload, Scan, AlertCircle, Check, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { FileUploader } from "@/components/file-uploader"
-import { ClientRecommendationDisplay } from "@/components/client-recommendation-display"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { analyzeArchitecturalImage, generateImprovedVersion } from "./analyzeArchitecturalImage"
 
-export default function EspaceClient() {
-  const [activeStep, setActiveStep] = useState(1)
-  const [isLoading, setIsLoading] = useState(false)
-  const [formData, setFormData] = useState({
-    materials: "",
-    problems: "",
-    improvements: "",
-    budget: "",
-  })
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [showResults, setShowResults] = useState(false)
+export default function ArchitecturalAIAnalysis() {
+  const [image, setImage] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [analysis, setAnalysis] = useState(null)
+  const [error, setError] = useState(null)
+  const [beforeAfterImages, setBeforeAfterImages] = useState(null)
 
-  const handleFileUpload = (file: File) => {
-    setUploadedFile(file)
-  }
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleNextStep = () => {
-    if (activeStep < 2) {
-      setActiveStep(activeStep + 1)
-    } else {
-      // Simulate processing
-      setIsLoading(true)
-      setTimeout(() => {
-        setIsLoading(false)
-        setShowResults(true)
-      }, 2000)
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      // Check file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        setError("Image file size exceeds 10MB limit.")
+        return
+      }
+      
+      setImage(file)
+      const fileReader = new FileReader()
+      fileReader.onload = (e) => {
+        setPreviewUrl(e.target.result)
+      }
+      fileReader.readAsDataURL(file)
+      setAnalysis(null)
+      setError(null)
+      setBeforeAfterImages(null)
     }
   }
 
-  const handlePrevStep = () => {
-    if (activeStep > 1) {
-      setActiveStep(activeStep - 1)
+  const analyzeImage = async () => {
+    if (!image || !previewUrl) return
+
+    setIsAnalyzing(true)
+    setError(null)
+
+    try {
+      // Call the Together AI service to analyze the image
+      const result = await analyzeArchitecturalImage(previewUrl)
+      
+      if (result.success) {
+        setAnalysis(result.analysis)
+        
+        // Set before image
+        setBeforeAfterImages({
+          before: previewUrl,
+          after: "/placeholder.jpg", // Using a local placeholder image instead of API endpoint
+        })
+        
+        // Now generate the improved version
+        setIsGenerating(true)
+        try {
+          const improvedResult = await generateImprovedVersion(
+            previewUrl, 
+            result.analysis.problems, 
+            result.analysis.solutions
+          )
+          
+          if (improvedResult.success) {
+            setBeforeAfterImages(prev => ({
+              ...prev,
+              after: improvedResult.generatedImage
+            }))
+          } else {
+            // If generation fails, use a placeholder
+            setBeforeAfterImages(prev => ({
+              ...prev,
+              after: "/placeholder.jpg"
+            }))
+          }
+        } catch (genError) {
+          console.error("Generation error:", genError)
+          setBeforeAfterImages(prev => ({
+            ...prev,
+            after: "/placeholder.jpg"
+          }))
+        } finally {
+          setIsGenerating(false)
+        }
+      } else {
+        setError(result.error || "Failed to analyze the image.")
+      }
+    } catch (err) {
+      setError("An unexpected error occurred. Please try again.")
+      console.error("Analysis error:", err)
+    } finally {
+      setIsAnalyzing(false)
     }
   }
 
-  const handleStartOver = () => {
-    setActiveStep(1)
-    setFormData({
-      materials: "",
-      problems: "",
-      improvements: "",
-      budget: "",
-    })
-    setUploadedFile(null)
-    setShowResults(false)
-  }
+  useEffect(() => {
+    // Clean up object URLs when component unmounts
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl)
+      }
+    }
+  }, [previewUrl])
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <Link href="/" className="flex items-center text-sm text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Retour à l'accueil
-        </Link>
-        <h1 className="text-3xl font-bold">Espace Client</h1>
-        <p className="text-muted-foreground mt-2">
-          Partagez des photos de votre espace et obtenez des recommandations personnalisées
-        </p>
-      </div>
-
-      {!showResults ? (
-        <Card className="max-w-4xl mx-auto">
-          <CardHeader>
-            <CardTitle>Analyse d'espace</CardTitle>
-            <CardDescription>Suivez les étapes pour obtenir des recommandations d'amélioration</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center">
-                  <div
-                    className={`rounded-full h-8 w-8 flex items-center justify-center ${activeStep >= 1 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+    <div className="w-full max-w-4xl mx-auto">
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Architecture AI Analysis</CardTitle>
+          <CardDescription>
+            Upload an image of your space to receive AI-powered analysis and improvement recommendations
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6">
+            <div className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-12 text-center">
+              {previewUrl ? (
+                <div className="w-full">
+                  <img 
+                    src={previewUrl} 
+                    alt="Uploaded space" 
+                    className="max-h-64 mx-auto object-contain mb-4" 
+                  />
+                  <p className="text-sm text-muted-foreground">{image?.name}</p>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setImage(null)
+                      setPreviewUrl(null)
+                      setAnalysis(null)
+                    }}
+                    className="mt-4"
                   >
-                    1
-                  </div>
-                  <div className={`h-1 w-12 ${activeStep >= 2 ? "bg-primary" : "bg-muted"}`}></div>
-                  <div
-                    className={`rounded-full h-8 w-8 flex items-center justify-center ${activeStep >= 2 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
-                  >
-                    2
-                  </div>
+                    Replace Image
+                  </Button>
                 </div>
-                <div className="text-sm text-muted-foreground">Étape {activeStep} sur 2</div>
-              </div>
+              ) : (
+                <>
+                  <Upload className="h-10 w-10 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium">Upload an image of your architectural space</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Supported formats: JPG, PNG (max 10MB)
+                  </p>
+                  <input
+                    id="image-upload"
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                  <Button asChild>
+                    <label htmlFor="image-upload">Upload Image</label>
+                  </Button>
+                </>
+              )}
             </div>
 
-            {activeStep === 1 && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium mb-4">Importez une photo de votre espace</h3>
-                  <FileUploader onFileUpload={handleFileUpload} acceptedFileTypes=".jpg,.jpeg,.png" />
+            {previewUrl && !analysis && (
+              <Button 
+                className="w-full" 
+                onClick={analyzeImage} 
+                disabled={isAnalyzing}
+              >
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Analyzing Architecture...
+                  </>
+                ) : (
+                  <>
+                    <Scan className="mr-2 h-4 w-4" />
+                    Analyze Architecture
+                  </>
+                )}
+              </Button>
+            )}
 
-                  {uploadedFile && (
-                    <div className="mt-4 p-4 border rounded-md bg-muted/50">
-                      <div className="flex items-center">
-                        <FileUp className="h-5 w-5 mr-2 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">{uploadedFile.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {analysis && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Analysis Results</CardTitle>
+            <CardDescription>
+              AI-powered assessment of your architectural space with recommended improvements
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="problems">
+              <TabsList className="mb-4">
+                <TabsTrigger value="problems">Identified Problems</TabsTrigger>
+                <TabsTrigger value="solutions">Recommended Solutions</TabsTrigger>
+                <TabsTrigger value="visualization">Before & After</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="problems" className="space-y-4">
+                {analysis.problems.map((problem, index) => (
+                  <div key={index} className="flex items-start gap-4 p-4 border rounded-lg">
+                    <div className={`rounded-full p-2 mt-1 ${
+                      problem.severity === 'high' 
+                        ? 'bg-red-100 text-red-700' 
+                        : problem.severity === 'medium'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      <AlertCircle className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium">{problem.title}</h3>
+                      <p className="text-muted-foreground">{problem.description}</p>
+                      <div className="mt-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                          problem.severity === 'high'
+                            ? 'bg-red-100 text-red-800'
+                            : problem.severity === 'medium'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {problem.severity.charAt(0).toUpperCase() + problem.severity.slice(1)} Priority
+                        </span>
                       </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ))}
+              </TabsContent>
 
-                <div>
-                  <Label htmlFor="materials">Matériaux utilisés</Label>
-                  <Textarea
-                    id="materials"
-                    name="materials"
-                    placeholder="Décrivez les matériaux présents dans votre espace (bois, béton, métal, verre, etc.)"
-                    value={formData.materials}
-                    onChange={handleInputChange}
-                    className="min-h-[100px]"
-                  />
-                </div>
-              </div>
-            )}
+              <TabsContent value="solutions" className="space-y-4">
+                {analysis.solutions.map((solution, index) => (
+                  <div key={index} className="flex items-start gap-4 p-4 border rounded-lg">
+                    <div className="rounded-full bg-green-100 text-green-700 p-2 mt-1">
+                      <Check className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium">{solution.title}</h3>
+                      <p className="text-muted-foreground">{solution.description}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                          solution.cost === 'high'
+                            ? 'bg-red-100 text-red-800'
+                            : solution.cost === 'medium'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-green-100 text-green-800'
+                        }`}>
+                          Cost: {solution.cost.charAt(0).toUpperCase() + solution.cost.slice(1)}
+                        </span>
+                        <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800">
+                          Time: {solution.implementationTime.charAt(0).toUpperCase() + solution.implementationTime.slice(1)}
+                        </span>
+                        <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                          solution.impact === 'high'
+                            ? 'bg-green-100 text-green-800'
+                            : solution.impact === 'medium'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-red-100 text-red-800'
+                        }`}>
+                          Impact: {solution.impact.charAt(0).toUpperCase() + solution.impact.slice(1)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </TabsContent>
 
-            {activeStep === 2 && (
-              <div className="space-y-6">
-                <div>
-                  <Label htmlFor="problems">Problèmes rencontrés</Label>
-                  <Textarea
-                    id="problems"
-                    name="problems"
-                    placeholder="Décrivez les problèmes que vous rencontrez (trop chaud, trop froid, sombre, bruyant, etc.)"
-                    value={formData.problems}
-                    onChange={handleInputChange}
-                    className="min-h-[100px]"
-                  />
+              <TabsContent value="visualization">
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="p-2">
+                        <img 
+                          src={beforeAfterImages?.before || "/placeholder.jpg"} 
+                          alt="Before" 
+                          className="w-full h-auto rounded-md"
+                        />
+                      </div>
+                      <div className="p-4 bg-muted">
+                        <h3 className="font-medium text-center">Current Space</h3>
+                      </div>
+                    </div>
+                    
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="p-2">
+                        {isGenerating ? (
+                          <div className="flex items-center justify-center h-64 bg-gray-100 rounded-md">
+                            <div className="text-center">
+                              <Loader2 className="h-12 w-12 animate-spin mx-auto mb-2 text-muted-foreground" />
+                              <p className="text-sm text-muted-foreground">Generating improved design...</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <img 
+                            src={beforeAfterImages?.after || "/placeholder.jpg"} 
+                            alt="After" 
+                            className="w-full h-auto rounded-md"
+                          />
+                        )}
+                      </div>
+                      <div className="p-4 bg-muted">
+                        <h3 className="font-medium text-center">AI Visualized Improvements</h3>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 bg-blue-50 text-blue-800 rounded-lg">
+                    <p className="text-sm">
+                      <strong>Note:</strong> This visualization represents a conceptual interpretation of the recommended improvements.
+                      Actual results may vary based on specific implementation details.
+                    </p>
+                  </div>
                 </div>
-
-                <div>
-                  <Label htmlFor="improvements">Améliorations souhaitées</Label>
-                  <Textarea
-                    id="improvements"
-                    name="improvements"
-                    placeholder="Décrivez les améliorations que vous souhaitez apporter à votre espace"
-                    value={formData.improvements}
-                    onChange={handleInputChange}
-                    className="min-h-[100px]"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="budget">Fourchette budgétaire (optionnel)</Label>
-                  <Select value={formData.budget} onValueChange={(value) => handleSelectChange("budget", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionnez votre budget" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Moins de 1000€</SelectItem>
-                      <SelectItem value="medium">Entre 1000€ et 5000€</SelectItem>
-                      <SelectItem value="high">Entre 5000€ et 10000€</SelectItem>
-                      <SelectItem value="very-high">Plus de 10000€</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
-          <CardFooter className="flex justify-between">
-            {activeStep > 1 ? (
-              <Button variant="outline" onClick={handlePrevStep}>
-                Précédent
-              </Button>
-            ) : (
-              <div></div>
-            )}
-            <Button onClick={handleNextStep} disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Traitement en cours...
-                </>
-              ) : activeStep < 2 ? (
-                "Suivant"
-              ) : (
-                "Obtenir des recommandations"
-              )}
-            </Button>
-          </CardFooter>
         </Card>
-      ) : (
-        <ClientRecommendationDisplay
-          problems={formData.problems}
-          improvements={formData.improvements}
-          budget={formData.budget}
-          onStartOver={handleStartOver}
-        />
       )}
     </div>
   )

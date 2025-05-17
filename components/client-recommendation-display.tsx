@@ -1,352 +1,149 @@
 "use client"
-import { useState } from "react"
-import { Download, FileText, Lightbulb, ThermometerSun } from "lucide-react"
+// Removed useState as it's not used in the final version of this component
+// import { useState } from "react"
+import { Download } from "lucide-react" // Removed unused FileText, Lightbulb, ThermometerSun
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ImageGenerator } from "./image-generator"
+
+// Interface definitions remain the same
+interface Problem {
+  title: string;
+  description: string;
+  severity: "high" | "medium" | "low";
+}
+
+interface Solution {
+  title: string;
+  description: string;
+  cost: "high" | "medium" | "low";
+  implementationTime: "months" | "weeks" | "days";
+  impact: "high" | "medium" | "low";
+}
+
+interface AnalysisResult {
+  problems: Problem[];
+  solutions: Solution[];
+}
 
 interface ClientRecommendationDisplayProps {
-  problems: string
-  improvements: string
-  budget: string
-  onStartOver: () => void
+  originalImage: string; // base64 data URL
+  analysis: AnalysisResult;
+  generatedImage: string; // URL of the generated image
+  onStartOver: () => void;
 }
 
 export function ClientRecommendationDisplay({
-  problems,
-  improvements,
-  budget,
+  originalImage,
+  analysis,
+  generatedImage,
   onStartOver,
 }: ClientRecommendationDisplayProps) {
-  const [generatedImages, setGeneratedImages] = useState<string[]>([])
-
-  // Simulation de recommandations basées sur les entrées de l'utilisateur
-  const getRecommendations = () => {
-    // Generate visualization prompts based on the problems and improvements
-    const generatePrompt = (title: string) => {
-      const spaceType = problems.toLowerCase().includes("salon")
-        ? "salon"
-        : problems.toLowerCase().includes("cuisine")
-          ? "cuisine"
-          : problems.toLowerCase().includes("chambre")
-            ? "chambre"
-            : problems.toLowerCase().includes("bureau")
-              ? "bureau"
-              : "pièce"
-
-      return `${title} dans un ${spaceType}, style architectural, rendu photoréaliste`
-    }
-
-    // Recommandations pour les problèmes de chaleur
-    if (problems.toLowerCase().includes("chaud") || problems.toLowerCase().includes("chaleur")) {
-      return {
-        title: "Recommandations pour réduire la chaleur",
-        summary: "Votre espace présente des problèmes de surchauffe qui peuvent être résolus avec plusieurs solutions.",
-        recommendations: [
-          {
-            title: "Brise-soleil orientables",
-            description:
-              "Installez des brise-soleil orientables pour bloquer les rayons directs du soleil tout en préservant la luminosité.",
-            cost: budget === "low" ? "Hors budget" : "Dans votre budget",
-            icon: <ThermometerSun className="h-5 w-5" />,
-            visualizationPrompt: generatePrompt("Brise-soleil orientables installés sur les fenêtres"),
-          },
-          {
-            title: "Film solaire pour vitrage",
-            description:
-              "Appliquez un film solaire sur vos fenêtres pour réduire la chaleur sans perdre la lumière naturelle.",
-            cost: "Dans votre budget",
-            icon: <ThermometerSun className="h-5 w-5" />,
-            visualizationPrompt: generatePrompt("Film solaire appliqué sur les fenêtres"),
-          },
-          {
-            title: "Ventilateurs de plafond",
-            description:
-              "Installez des ventilateurs de plafond pour améliorer la circulation de l'air et créer une sensation de fraîcheur.",
-            cost: "Dans votre budget",
-            icon: <ThermometerSun className="h-5 w-5" />,
-            visualizationPrompt: generatePrompt("Ventilateurs de plafond design"),
-          },
-        ],
-      }
-    }
-
-    // Recommandations pour les problèmes d'éclairage
-    if (
-      problems.toLowerCase().includes("sombre") ||
-      problems.toLowerCase().includes("lumière") ||
-      problems.toLowerCase().includes("eclairage")
-    ) {
-      return {
-        title: "Recommandations pour améliorer l'éclairage",
-        summary: "Votre espace manque de lumière naturelle, voici des solutions pour l'améliorer.",
-        recommendations: [
-          {
-            title: "Puits de lumière",
-            description: "Installez des puits de lumière pour apporter de la lumière naturelle depuis le toit.",
-            cost: budget === "low" || budget === "medium" ? "Hors budget" : "Dans votre budget",
-            icon: <Lightbulb className="h-5 w-5" />,
-            visualizationPrompt: generatePrompt("Puits de lumière installé au plafond"),
-          },
-          {
-            title: "Miroirs stratégiquement placés",
-            description:
-              "Placez des miroirs face aux fenêtres pour réfléchir la lumière naturelle plus profondément dans la pièce.",
-            cost: "Dans votre budget",
-            icon: <Lightbulb className="h-5 w-5" />,
-            visualizationPrompt: generatePrompt("Miroirs stratégiquement placés pour réfléchir la lumière"),
-          },
-          {
-            title: "Éclairage LED indirect",
-            description:
-              "Installez un système d'éclairage LED indirect pour créer une ambiance lumineuse agréable sans éblouissement.",
-            cost: "Dans votre budget",
-            icon: <Lightbulb className="h-5 w-5" />,
-            visualizationPrompt: generatePrompt("Éclairage LED indirect installé"),
-          },
-        ],
-      }
-    }
-
-    // Recommandations pour les problèmes acoustiques
-    if (
-      problems.toLowerCase().includes("bruit") ||
-      problems.toLowerCase().includes("acoustique") ||
-      problems.toLowerCase().includes("sonore")
-    ) {
-      return {
-        title: "Recommandations pour améliorer l'acoustique",
-        summary: "Votre espace présente des problèmes acoustiques qui peuvent être résolus avec plusieurs solutions.",
-        recommendations: [
-          {
-            title: "Panneaux acoustiques décoratifs",
-            description:
-              "Installez des panneaux acoustiques décoratifs sur les murs pour absorber les sons et réduire la réverbération.",
-            cost: "Dans votre budget",
-            icon: <FileText className="h-5 w-5" />,
-            visualizationPrompt: generatePrompt("Panneaux acoustiques décoratifs sur les murs"),
-          },
-          {
-            title: "Rideaux épais",
-            description: "Utilisez des rideaux épais pour absorber les sons et réduire les échos.",
-            cost: "Dans votre budget",
-            icon: <FileText className="h-5 w-5" />,
-            visualizationPrompt: generatePrompt("Rideaux épais aux fenêtres pour l'acoustique"),
-          },
-          {
-            title: "Tapis et moquettes",
-            description:
-              "Ajoutez des tapis ou de la moquette pour absorber les bruits d'impact et réduire la propagation du son.",
-            cost: "Dans votre budget",
-            icon: <FileText className="h-5 w-5" />,
-            visualizationPrompt: generatePrompt("Tapis et moquettes pour améliorer l'acoustique"),
-          },
-        ],
-      }
-    }
-
-    // Recommandations par défaut
-    return {
-      title: "Recommandations générales d'amélioration",
-      summary: "Voici quelques recommandations générales pour améliorer votre espace.",
-      recommendations: [
-        {
-          title: "Peinture réfléchissante",
-          description: "Utilisez une peinture claire et réfléchissante pour augmenter la luminosité de l'espace.",
-          cost: "Dans votre budget",
-          icon: <Lightbulb className="h-5 w-5" />,
-          visualizationPrompt: generatePrompt("Murs peints avec une peinture claire et réfléchissante"),
-        },
-        {
-          title: "Plantes d'intérieur",
-          description:
-            "Ajoutez des plantes d'intérieur pour améliorer la qualité de l'air et créer une ambiance plus agréable.",
-          cost: "Dans votre budget",
-          icon: <ThermometerSun className="h-5 w-5" />,
-          visualizationPrompt: generatePrompt("Plantes d'intérieur pour améliorer l'ambiance"),
-        },
-        {
-          title: "Mobilier modulable",
-          description: "Optez pour du mobilier modulable qui peut être réarrangé selon vos besoins.",
-          cost: budget === "low" ? "Partiellement dans votre budget" : "Dans votre budget",
-          icon: <FileText className="h-5 w-5" />,
-          visualizationPrompt: generatePrompt("Mobilier modulable et adaptable"),
-        },
-      ],
-    }
-  }
-
-  const recommendations = getRecommendations()
+  const { problems, solutions } = analysis;
 
   const handleDownloadPDF = () => {
     // Simulation de téléchargement de PDF
-    alert("Téléchargement du rapport PDF (fonctionnalité simulée)")
-  }
-
-  const handleImageGenerated = (imageBase64: string) => {
-    setGeneratedImages([...generatedImages, imageBase64])
-  }
+    alert("Téléchargement du rapport PDF (fonctionnalité simulée)");
+  };
 
   return (
     <div className="max-w-4xl mx-auto">
       <Card>
         <CardHeader>
-          <CardTitle>{recommendations.title}</CardTitle>
-          <CardDescription>Basé sur votre description et vos objectifs d'amélioration</CardDescription>
+          <CardTitle>Analyse Architecturale et Recommandations</CardTitle>
+          <CardDescription>Résultats de l'analyse IA de votre espace et suggestions d'amélioration.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-6 p-4 bg-muted rounded-lg">
-            <p className="font-medium">{recommendations.summary}</p>
-          </div>
-
-          <Tabs defaultValue="recommendations">
-            <TabsList className="mb-4">
-              <TabsTrigger value="recommendations">Recommandations</TabsTrigger>
-              <TabsTrigger value="examples">Exemples visuels</TabsTrigger>
-              <TabsTrigger value="suppliers">Fournisseurs</TabsTrigger>
-              <TabsTrigger value="visualizations">Visualisations IA</TabsTrigger>
+          <Tabs defaultValue="original" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="original">Image Originale</TabsTrigger>
+              <TabsTrigger value="analysis">Analyse et Solutions</TabsTrigger>
+              <TabsTrigger value="improved">Visualisation Améliorée</TabsTrigger>
             </TabsList>
-
-            <TabsContent value="recommendations" className="space-y-4">
-              {recommendations.recommendations.map((rec, index) => (
-                <div key={index} className="flex items-start gap-4 p-4 border rounded-lg">
-                  <div className="rounded-full bg-primary/10 p-2 mt-1">{rec.icon}</div>
-                  <div className="flex-1">
-                    <h3 className="font-medium">{rec.title}</h3>
-                    <p className="text-muted-foreground">{rec.description}</p>
-                    <div className="mt-2">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                          rec.cost === "Dans votre budget"
-                            ? "bg-green-100 text-green-800"
-                            : rec.cost === "Partiellement dans votre budget"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {rec.cost}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <TabsContent value="original">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Votre Image Initiale</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {originalImage ? (
+                    <img src={originalImage} alt="Original architectural space" className="rounded-lg w-full h-auto" />
+                  ) : (
+                    <p>Aucune image originale fournie.</p>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
-
-            <TabsContent value="examples" className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="aspect-video bg-muted flex items-center justify-center">
-                    <Lightbulb className="h-10 w-10 text-muted-foreground" />
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-medium">Exemple de brise-soleil orientables</h3>
-                    <p className="text-sm text-muted-foreground">Installation sur une façade sud</p>
-                  </div>
+            <TabsContent value="analysis">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-2xl font-semibold mb-3">Problèmes Identifiés</h3>
+                  {problems && problems.length > 0 ? (
+                    <ul className="space-y-4">
+                      {problems.map((problem, index) => (
+                        <li key={`problem-${index}`} className="p-4 border rounded-lg bg-card shadow">
+                          <h4 className="font-semibold text-lg">{problem.title} <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${problem.severity === 'high' ? 'bg-red-100 text-red-800' : problem.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-700'}`}>{problem.severity.toUpperCase()}</span></h4>
+                          <p className="text-muted-foreground mt-1">{problem.description}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>Aucun problème spécifique identifié.</p>
+                  )}
                 </div>
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="aspect-video bg-muted flex items-center justify-center">
-                    <Lightbulb className="h-10 w-10 text-muted-foreground" />
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-medium">Exemple de puits de lumière</h3>
-                    <p className="text-sm text-muted-foreground">Intégration dans un salon</p>
-                  </div>
-                </div>
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="aspect-video bg-muted flex items-center justify-center">
-                    <FileText className="h-10 w-10 text-muted-foreground" />
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-medium">Panneaux acoustiques décoratifs</h3>
-                    <p className="text-sm text-muted-foreground">Installation dans un espace de travail</p>
-                  </div>
-                </div>
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="aspect-video bg-muted flex items-center justify-center">
-                    <ThermometerSun className="h-10 w-10 text-muted-foreground" />
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-medium">Ventilateurs de plafond design</h3>
-                    <p className="text-sm text-muted-foreground">Intégration dans un salon moderne</p>
-                  </div>
+                <div>
+                  <h3 className="text-2xl font-semibold mb-3">Solutions Proposées</h3>
+                  {solutions && solutions.length > 0 ? (
+                    <ul className="space-y-4">
+                      {solutions.map((solution, index) => (
+                        <li key={`solution-${index}`} className="p-4 border rounded-lg bg-card shadow">
+                          <h4 className="font-semibold text-lg">{solution.title}</h4>
+                          <p className="text-muted-foreground mt-1">{solution.description}</p>
+                          <div className="text-xs mt-2 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1 text-muted-foreground">
+                            <span><span className="font-medium text-foreground">Coût:</span> {solution.cost}</span>
+                            <span><span className="font-medium text-foreground">Temps:</span> {solution.implementationTime}</span>
+                            <span><span className="font-medium text-foreground">Impact:</span> {solution.impact}</span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>Aucune solution spécifique proposée.</p>
+                  )}
                 </div>
               </div>
             </TabsContent>
-
-            <TabsContent value="suppliers" className="space-y-4">
-              <div className="space-y-4">
-                <div className="p-4 border rounded-lg">
-                  <h3 className="font-medium">EcoMatériaux</h3>
-                  <p className="text-muted-foreground">Fournisseur de matériaux écologiques et durables</p>
-                  <Button variant="link" className="px-0">
-                    Visiter le site
-                  </Button>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <h3 className="font-medium">LumièreDesign</h3>
-                  <p className="text-muted-foreground">Spécialiste en solutions d'éclairage naturel et artificiel</p>
-                  <Button variant="link" className="px-0">
-                    Visiter le site
-                  </Button>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <h3 className="font-medium">AcoustiPro</h3>
-                  <p className="text-muted-foreground">Expert en solutions acoustiques pour tous types d'espaces</p>
-                  <Button variant="link" className="px-0">
-                    Visiter le site
-                  </Button>
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="visualizations" className="space-y-4">
-              <div className="mb-4">
-                <h3 className="text-lg font-medium mb-2">Générer une visualisation</h3>
-                <p className="text-muted-foreground mb-4">
-                  Utilisez l'IA pour visualiser les améliorations recommandées
-                </p>
-
-                <div className="border rounded-lg p-4">
-                  <ImageGenerator
-                    initialPrompt={recommendations.recommendations[0]?.visualizationPrompt || ""}
-                    onImageGenerated={handleImageGenerated}
-                  />
-                </div>
-              </div>
-
-              {generatedImages.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="text-lg font-medium mb-2">Visualisations générées</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {generatedImages.map((imgBase64, index) => (
-                      <Card key={index}>
-                        <CardContent className="p-2">
-                          <img
-                            src={`data:image/png;base64,${imgBase64}`}
-                            alt={`Generated visualization ${index + 1}`}
-                            className="w-full h-auto rounded-md"
-                          />
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
+            <TabsContent value="improved">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Visualisation de l'Espace Amélioré</CardTitle>
+                  <CardDescription>Générée par IA basée sur les solutions proposées.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {generatedImage ? (
+                    <img src={generatedImage} alt="Generated improved architectural space" className="rounded-lg w-full h-auto" />
+                  ) : (
+                    <p>La génération de l'image améliorée est en cours ou n'est pas encore disponible.</p>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
+          <div className="mt-8 flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4">
+            <Button onClick={onStartOver} variant="outline">
+              Recommencer une nouvelle analyse
+            </Button>
+            <Button onClick={handleDownloadPDF}>
+              <Download className="mr-2 h-4 w-4" /> Télécharger le Rapport PDF (simulé)
+            </Button>
+          </div>
         </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button variant="outline" onClick={onStartOver}>
-            Nouvelle analyse
-          </Button>
-          <Button onClick={handleDownloadPDF}>
-            <Download className="mr-2 h-4 w-4" />
-            Télécharger les recommandations
-          </Button>
+        <CardFooter className="flex justify-center pt-6">
+          {/* Optional: Add a small note or branding here */}
+          <p className="text-xs text-muted-foreground">Analyse fournie par ArchIntellect AI</p>
         </CardFooter>
       </Card>
     </div>
-  )
+  );
 }
