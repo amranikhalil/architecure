@@ -9,17 +9,47 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { analyzeArchitecturalImage, generateImprovedVersion } from "./analyzeArchitecturalImage"
 
-export default function ArchitecturalAIAnalysis() {
-  const [image, setImage] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState(null)
+// Define interfaces for our state
+interface Problem {
+  title: string;
+  description: string;
+  severity: 'high' | 'medium' | 'low';
+}
+
+interface Solution {
+  title: string;
+  description: string;
+  cost: 'high' | 'medium' | 'low';
+  implementationTime: string;
+  impact: 'high' | 'medium' | 'low';
+}
+
+interface AnalysisResult {
+  descriptionImageOriginale: string;
+  problems: Problem[];
+  solutions: Solution[];
+}
+
+interface BeforeAfterState {
+  before: string | null;
+  after: string | null;
+}
+
+export default function ArchitecturalAIAnalysis(): React.ReactElement {
+  const [image, setImage] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [analysis, setAnalysis] = useState(null)
-  const [error, setError] = useState(null)
-  const [beforeAfterImages, setBeforeAfterImages] = useState(null)
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [beforeAfterImages, setBeforeAfterImages] = useState<BeforeAfterState | null>(null)
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0]
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) {
+      // setError("No file selected."); // Optionally set an error
+      return;
+    }
+    const file = e.target.files[0];
     if (file) {
       // Check file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
@@ -29,8 +59,8 @@ export default function ArchitecturalAIAnalysis() {
       
       setImage(file)
       const fileReader = new FileReader()
-      fileReader.onload = (e) => {
-        setPreviewUrl(e.target.result)
+      fileReader.onload = (e: ProgressEvent<FileReader>) => {
+        setPreviewUrl(e.target?.result as string | null)
       }
       fileReader.readAsDataURL(file)
       setAnalysis(null)
@@ -61,28 +91,30 @@ export default function ArchitecturalAIAnalysis() {
         // Now generate the improved version
         setIsGenerating(true)
         try {
+          const descriptionImageOriginale = result.analysis.descriptionImageOriginale || "Description non fournie"; // Fallback if not present
           const improvedResult = await generateImprovedVersion(
             previewUrl, 
             result.analysis.problems, 
-            result.analysis.solutions
+            result.analysis.solutions,
+            descriptionImageOriginale // Pass the new description
           )
           
           if (improvedResult.success) {
             setBeforeAfterImages(prev => ({
-              ...prev,
+              before: prev!.before,
               after: improvedResult.generatedImage
             }))
           } else {
             // If generation fails, use a placeholder
             setBeforeAfterImages(prev => ({
-              ...prev,
+              before: prev!.before,
               after: "/placeholder.jpg"
             }))
           }
         } catch (genError) {
           console.error("Generation error:", genError)
           setBeforeAfterImages(prev => ({
-            ...prev,
+            before: prev!.before,
             after: "/placeholder.jpg"
           }))
         } finally {

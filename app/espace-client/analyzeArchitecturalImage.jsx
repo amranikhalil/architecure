@@ -8,49 +8,52 @@ export async function analyzeArchitecturalImage(imageBase64) {
       apiKey: process.env.TOGETHER_API_KEY,
     })
 
-    // Strip the data URL prefix if present
     const base64Image = imageBase64.includes("base64,")
       ? imageBase64.split("base64,")[1]
       : imageBase64
 
-    // Prepare the prompt for architectural observations
-    const systemPrompt = `You are a JSON data generation service.
-    Based on the provided image, you MUST output ONLY a single JSON object.
-    Your entire response MUST start with '{' and end with '}'. No other text, explanations, or markdown are allowed before or after the JSON object.
-    
-    The JSON object MUST follow this exact structure. Fill in the placeholder string values:
+    const systemPrompt = `## MISSION ##
+Vous êtes un analyseur d'images architecturales automatisé.
+Votre SEULE ET UNIQUE fonction est d'extraire des observations et des solutions d'une image fournie et de les retourner sous forme d'un objet JSON STRICT.
+NE PAS ENGAGER DE CONVERSATION. NE PAS FOURNIR D'EXPLICATIONS. NE PAS UTILISER DE PHRASES COMPLÈTES EN DEHORS DES VALEURS JSON.
+
+## LANGUE DE SORTIE ##
+Tous les champs textuels (titres, descriptions) dans le JSON DOIVENT être en FRANÇAIS.
+
+## FORMAT DE SORTIE JSON OBLIGATOIRE ##
+L'objet JSON doit impérativement suivre cette structure (NE PAS inclure les commentaires // dans le JSON final) :
+{
+  "descriptionImageOriginale": "Description en français de l'image originale.",
+  "problems": [
     {
-      "problems": [
-        {
-          "title": "string_placeholder_for_observation_1_title",
-          "description": "string_placeholder_for_observation_1_description",
-          "severity": "string_placeholder_for_observation_1_severity (e.g., high, medium, low)"
-        }
-        // Add more problem objects here if multiple observations are made, following the same structure.
-        // If no specific observations, this array can be empty or contain a placeholder object.
-      ],
-      "solutions": [
-        {
-          "title": "string_placeholder_for_suggestion_1_title",
-          "description": "string_placeholder_for_suggestion_1_description",
-          "cost": "string_placeholder_for_suggestion_1_cost (e.g., high, medium, low)",
-          "implementationTime": "string_placeholder_for_suggestion_1_time (e.g., months, weeks, days)",
-          "impact": "string_placeholder_for_suggestion_1_impact (e.g., high, medium, low)"
-        }
-        // Add more solution objects here if multiple suggestions are made, following the same structure.
-        // If no specific suggestions, this array can be empty or contain a placeholder object.
-      ]
+      "title": "Titre du problème en français",
+      "description": "Description détaillée du problème en français",
+      "severity": "high" // ou "medium" ou "low"
     }
-    
-    Replace ALL string_placeholder_for... values with actual information derived from the image. If certain information isn't applicable or found, use a concise placeholder like "N/A" or an empty string for that value, but maintain the JSON structure.
-    CRITICAL: Your response must be ONLY this JSON object. Verify it is valid JSON before outputting.`
+    // ... autres problèmes si détectés
+  ],
+  "solutions": [
+    {
+      "title": "Titre de la solution en français",
+      "description": "Description détaillée de la solution en français",
+      "cost": "high" // ou "medium" ou "low",
+      "implementationTime": "jours" // ou "semaines" ou "mois",
+      "impact": "high" // ou "medium" ou "low"
+    }
+    // ... autres solutions si proposées
+  ]
+}
 
-    const userPrompt = "Provide your analysis of the image SOLELY in the JSON format specified by your system instructions."
+## INSTRUCTIONS IMPORTANTES ##
+1. Si aucun problème ou solution n'est détecté, retournez les tableaux "problems" et "solutions" vides : [].
+2. Votre réponse COMPLÈTE doit commencer par '{' et se terminer par '}'. Aucun caractère en dehors.`
 
-    // Call the Together AI API with the Llama 3.2 Vision model
+    const userPrompt = "Image fournie pour analyse JSON." // Très neutre pour éviter toute confusion de dialogue.
+
     const response = await together.chat.completions.create({
       model: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo",
       max_tokens: 2048,
+      temperature: 0, // Pour une sortie déterministe et moins "créative"
       messages: [
         {
           role: "system",
@@ -74,23 +77,19 @@ export async function analyzeArchitecturalImage(imageBase64) {
       ],
     })
 
-    // Parse the JSON response more robustly
     const analysisText = response.choices[0].message.content;
     let analysisJson;
 
     try {
-      // Attempt to find and parse JSON block, handling potential surrounding text or markdown
       const jsonMatch = analysisText.match(/\{.*\}/s);
       if (jsonMatch && jsonMatch[0]) {
+        console.log("Attempting to parse JSON:", jsonMatch[0]); // Log the JSON string before parsing
         analysisJson = JSON.parse(jsonMatch[0]);
       } else {
-        // Fallback if no clear JSON block is found, try direct parse (might fail as before)
-        // Or, more likely, the model didn't follow instructions at all.
         throw new Error("No valid JSON block found in the AI response. Response was: " + analysisText.substring(0, 100) + "...");
       }
     } catch (parseError) {
       console.error("Error parsing AI response JSON:", parseError);
-      console.error("Original AI response text was:", analysisText);
       return {
         success: false,
         error: `Failed to parse AI analysis. Detail: ${parseError.message}. Response started with: ${analysisText.substring(0,100)}...`,
@@ -110,46 +109,71 @@ export async function analyzeArchitecturalImage(imageBase64) {
   }
 }
 
-export async function generateImprovedVersion(imageBase64, problems, solutions) {
+/**
+ * Generates an improved version of an architectural image.
+ * @param {string} imageBase64 The base64 encoded original image.
+ * @param {Array<object>} problems Array of problem objects.
+ * @param {Array<object>} solutions Array of solution objects.
+ * @param {string} descriptionImageOriginale Textual description of the original image.
+ * @returns {Promise<object>} Object containing success status and generated image URL or error.
+ */
+export async function generateImprovedVersion(imageBase64, problems, solutions, descriptionImageOriginale) {
   try {
     const together = new Together({
       apiKey: process.env.TOGETHER_API_KEY,
     })
 
-    // Strip the data URL prefix if present
     const base64Image = imageBase64.includes("base64,")
       ? imageBase64.split("base64,")[1]
       : imageBase64
 
-    // Prepare a concise summary of the problems and solutions
     const problemsSummary = problems.map(p => p.title).join(", ")
     const solutionsSummary = solutions.map(s => s.title).join(", ")
 
-    // Create the prompt for image generation
-    const systemPrompt = `You are an expert architectural designer specialized in creating improved designs based on existing spaces. 
-    Generate a realistic architectural visualization showing the same space but with all the suggested improvements applied.`
+    // System prompt that defines the AI's role
+    const systemPrompt = `Tu es un architecte expert spécialisé dans la rénovation et l'amélioration d'espaces existants. 
+Génère une **visualisation architecturale réaliste** montrant le même espace mais **amélioré**, avec les **solutions suggérées appliquées.**
+Respecte la même **perspective, orientation, et structure générale.**`;
 
-    const userPrompt = `This is an image of an architectural space that has the following problems: ${problemsSummary}.
+    // Create problem-solution pairs mapping
+    const problemsList = problemsSummary.split(',').map(p => p.trim());
+    const solutionsList = solutionsSummary.split(',').map(s => s.trim());
+    
+    // Build problem-solution mapping as plain string to avoid template literal issues
+    let problemSolutionMapping = `- Problème: ${problemsList[0]} → Solution: ${solutionsList[0]}\n`;
+    
+    // Add remaining problem-solution pairs
+    for (let i = 1; i < problemsList.length; i++) {
+      const solution = i < solutionsList.length 
+        ? solutionsList[i] 
+        : "Amélioration générale de l'espace";
+      
+      problemSolutionMapping += `- Problème: ${problemsList[i]} → Solution: ${solution}\n`;
+    }
 
-I want you to visualize the same space after implementing these solutions: ${solutionsSummary}.
+    // User prompt that combines the inputs with instructions and emphasizes problem-solution mapping
+    const userPrompt = `Description de l'image originale :
+${descriptionImageOriginale}
 
-Generate a photorealistic visualization of the improved space that clearly shows how the implemented solutions address the identified problems. 
-Maintain the same perspective and basic structure of the space.`
+L'image actuelle présente les problèmes suivants :
+${problemsSummary}
 
-    // Call the Together AI API with a generative model
-    // Note: This is a placeholder as Together AI might use different endpoints or methods for image generation
-    // Attempting to use 'together.images.create' as 'generate' is not a function
+Je souhaite voir ces problèmes résolus avec les solutions spécifiques suivantes :
+${problemSolutionMapping}
+Génère une visualisation photoréaliste du même espace après la mise en œuvre de ces solutions.
+La nouvelle image doit clairement montrer comment chaque modification proposée corrige spécifiquement le défaut correspondant, tout en respectant la description et les caractéristiques principales de l'image originale. Maintenez la même perspective et structure de base de l'espace.`;
+
+    // Combine system and user prompts for better context
+    const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
+
     const response = await together.images.create({
-      model: "black-forest-labs/FLUX.1-schnell", // Switched to a dedicated image generation model
-      prompt: userPrompt,
-      // reference_image: `data:image/jpeg;base64,${base64Image}`, // Temporarily commented out to test base functionality
-      n: 1, // Standard parameter for number of images, often 'n'
+      model: "black-forest-labs/FLUX.1-schnell",
+      prompt: combinedPrompt,
+      n: 1,
       height: 512,
       width: 512,
-      // You might need to add other parameters like 'steps', 'cfg_scale' depending on the API requirements
     })
 
-    // The response would typically include the generated image as base64
     return {
       success: true,
       generatedImage: response.data[0].url,
