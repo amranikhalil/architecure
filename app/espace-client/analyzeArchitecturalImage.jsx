@@ -12,28 +12,46 @@ export async function analyzeArchitecturalImage(imageBase64) {
       ? imageBase64.split("base64,")[1]
       : imageBase64
 
-    const userPrompt = `S'il vous plaît, analysez attentivement l'image architecturale ci-jointe.\nFournissez votre analyse intégralement en FRANÇAIS et sous la forme d'un objet JSON.\nCet objet JSON doit contenir les clés suivantes :\n1. 
-     "descriptionImageOriginale": une chaîne de caractères décrivant brièvement l'image.\n2. 
-      "problems": un tableau d'objets. Chaque objet doit avoir les clés "title" (chaîne),
-       "description" (chaîne), et "severity" (valeurs possibles : "faible", "moyen", "élevé"). Si aucun problème n'est identifié, ce doit être un tableau vide [].\n3.  
-       "solutions": un tableau d'objets. Chaque objet doit avoir les clés "title" (chaîne), "description" (chaîne), "cost" (valeurs : "faible", "moyen", "élevé"),
-        "implementationTime" (valeurs : "jours", "semaines", "mois"), et "impact" (valeurs : "faible", "moyen", "élevé"). Si aucune solution n'est identifiée, ce doit être un tableau vide [].\n\nVotre réponse doit être UNIQUEMENT l'objet JSON.
-         N'ajoutez aucun texte explicatif avant ou après l'objet JSON.\nPar exemple, 
-         un problème pourrait être : { "title": "Isolation thermique", "description": "Les fenêtres semblent anciennes et pourraient causer des pertes de chaleur.", 
-         "severity": "moyen" }\nUne solution pourrait être : { "title": "Remplacer les fenêtres", "description": "Installer des fenêtres à double vitrage pour améliorer l'isolation.",
-          "cost": "élevé", "implementationTime": "semaines", "impact": "élevé" }\nAnalysez l'image et générez le JSON.`;
+    // System prompt to set expectations without providing examples
+    const systemPrompt = `Vous êtes un expert en décoration d'intérieur et design d'espaces. Votre tâche est d'analyser des images d'espaces et de fournir des observations détaillées ainsi que des suggestions d'amélioration en format JSON structuré. 
+Vos observations doivent être pertinentes, spécifiques à l'image et fondées sur des principes de design. 
+Vos suggestions doivent être créatives, réalisables et appropriées au contexte visible dans l'image.
+Vous devez toujours répondre avec un JSON valide sans aucun texte avant ou après.`;
+
+    // User prompt without examples
+    const userPrompt = `Analysez cette image d'espace et fournissez un objet JSON comprenant:
+
+1. "descriptionImageOriginale": une brève description objective de l'espace visualisé.
+
+2. "problems": un tableau d'au moins 3 observations constructives. Chaque élément doit contenir:
+   - "title": un titre court et précis du problème
+   - "description": une explication détaillée du problème
+   - "severity": évaluation de l'importance ("faible", "moyen", ou "élevé")
+
+3. "solutions": un tableau avec au moins une solution pour chaque problème identifié. Chaque solution doit avoir:
+   - "title": un titre clair
+   - "description": une explication détaillée de la solution
+   - "cost": estimation du coût ("faible", "moyen", "élevé")
+   - "implementationTime": temps de mise en œuvre estimé ("jours", "semaines", "mois")
+   - "impact": impact prévu de la solution ("faible", "moyen", "élevé")
+
+Votre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou après.`;
 
     const response = await together.chat.completions.create({
       model: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo",
       max_tokens: 2048,
-      temperature: 0, // Pour une sortie déterministe et moins "créative"
+      temperature: 0.3, // Slightly increased for more creative responses
       messages: [
+        {
+          role: "system",
+          content: systemPrompt
+        },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: userPrompt, // This now refers to the comprehensive userPrompt defined above
+              text: userPrompt,
             },
             {
               type: "image_url",
@@ -50,18 +68,69 @@ export async function analyzeArchitecturalImage(imageBase64) {
     let analysisJson;
 
     try {
-      const jsonMatch = analysisText.match(/\{.*\}/s);
+      // First try: extract JSON using regex for most common pattern
+      const jsonPattern = /\{[\s\S]*\}/;
+      const jsonMatch = analysisText.match(jsonPattern);
+      
       if (jsonMatch && jsonMatch[0]) {
-        console.log("Attempting to parse JSON:", jsonMatch[0]); // Log the JSON string before parsing
+        console.log("Attempting to parse JSON with primary method:", jsonMatch[0].substring(0, 100) + "...");
         analysisJson = JSON.parse(jsonMatch[0]);
       } else {
-        throw new Error("No valid JSON block found in the AI response. Response was: " + analysisText + "...");
+        throw new Error("No valid JSON block found with primary method");
       }
     } catch (parseError) {
-      console.error("Error parsing AI response JSON:", parseError);
+      console.error("Error parsing AI response JSON with primary method:", parseError);
+      
+      // Second try: clean up markdown and other formatting
+      try {
+        const cleanedText = analysisText
+          .replace(/```json|```/g, '')  // Remove markdown code blocks
+          .replace(/^[\s\S]*?(\{)/m, '{')  // Remove any text before first {
+          .replace(/\}[\s\S]*$/m, '}')     // Remove any text after last }
+          .trim();
+          
+        if (cleanedText.startsWith('{') && cleanedText.endsWith('}')) {
+          console.log("Attempting to parse JSON with secondary method:", cleanedText.substring(0, 100) + "...");
+          analysisJson = JSON.parse(cleanedText);
+        } else {
+          throw new Error("Secondary JSON extraction failed");
+        }
+      } catch (secondaryError) {
+        // Third try: handle case where model might have wrapped the JSON in quotes
+        try {
+          const unquotedText = analysisText
+            .replace(/^["']|["']$/g, '')  // Remove surrounding quotes
+            .replace(/\\"/g, '"')         // Replace escaped quotes
+            .trim();
+            
+          if (unquotedText.startsWith('{') && unquotedText.endsWith('}')) {
+            console.log("Attempting to parse JSON with tertiary method:", unquotedText.substring(0, 100) + "...");
+            analysisJson = JSON.parse(unquotedText);
+          } else {
+            throw new Error("Tertiary JSON extraction failed");
+          }
+        } catch (tertiaryError) {
+          return {
+            success: false,
+            error: `Failed to parse AI analysis. Detail: ${parseError.message}.`,
+            rawResponse: analysisText // Include raw response for debugging
+          };
+        }
+      }
+    }
+
+    // Validate the JSON structure has the required fields
+    if (!analysisJson.descriptionImageOriginale || 
+        !Array.isArray(analysisJson.problems) || 
+        !Array.isArray(analysisJson.solutions)) {
+      
+      console.error("Invalid JSON structure received:", analysisJson);
+      
       return {
         success: false,
-        error: `Failed to parse AI analysis. Detail: ${parseError.message}. Response started with: ${analysisText.substring(0,100)}...`,
+        error: "AI response did not contain the expected JSON structure with descriptionImageOriginale, problems, and solutions.",
+        receivedStructure: Object.keys(analysisJson).join(', '),
+        rawResponse: analysisText
       };
     }
 
@@ -73,7 +142,8 @@ export async function analyzeArchitecturalImage(imageBase64) {
     console.error("Error analyzing image:", error)
     return {
       success: false,
-      error: error.message || "Failed to analyze ima",
+      error: error.message || "Failed to analyze image",
+      stack: error.stack
     }
   }
 }
@@ -99,40 +169,42 @@ export async function generateImprovedVersion(imageBase64, problems, solutions, 
     const problemsSummary = problems.map(p => p.title).join(", ")
     const solutionsSummary = solutions.map(s => s.title).join(", ")
 
-    // System prompt that defines the AI's role
-    const systemPrompt = `Tu es un architecte expert spécialisé dans la rénovation et l'amélioration d'espaces existants. 
-Génère une **visualisation architecturale réaliste** montrant le même espace mais **amélioré**, avec les **solutions suggérées appliquées.**
-Respecte la même **perspective, orientation, et structure générale.**`;
+    // System prompt that defines the AI's role without examples
+    const systemPrompt = `Vous êtes un expert en design d'intérieur et visualisation 3D qui crée des rendus réalistes d'espaces améliorés. 
+Votre tâche est de générer une visualisation photoréaliste qui montre l'espace avec les améliorations suggérées, tout en préservant la structure, l'échelle et la perspective originales.`;
 
     // Create problem-solution pairs mapping
     const problemsList = problemsSummary.split(',').map(p => p.trim());
     const solutionsList = solutionsSummary.split(',').map(s => s.trim());
     
-    // Build problem-solution mapping as plain string to avoid template literal issues
-    let problemSolutionMapping = `- Problème: ${problemsList[0]} → Solution: ${solutionsList[0]}\n`;
+    // Build problem-solution mapping with clearer instructions
+    let improvementMapping = "";
     
-    // Add remaining problem-solution pairs
-    for (let i = 1; i < problemsList.length; i++) {
+    for (let i = 0; i < problemsList.length; i++) {
       const solution = i < solutionsList.length 
         ? solutionsList[i] 
         : "Amélioration générale de l'espace";
       
-      problemSolutionMapping += `- Problème: ${problemsList[i]} → Solution: ${solution}\n`;
+      improvementMapping += `${i+1}. Problème: "${problemsList[i]}" → Application visuelle: "${solution}"\n`;
     }
 
-    // User prompt that combines the inputs with instructions and emphasizes problem-solution mapping
-    const userPrompt = `Description de l'image originale :
+    // User prompt with focused instructions on visual transformation
+    const userPrompt = `Description de l'espace original:
 ${descriptionImageOriginale}
 
-L'image actuelle présente les problèmes suivants :
-${problemsSummary}
+Créez une visualisation photoréaliste qui intègre les améliorations suivantes:
 
-Je souhaite voir ces problèmes résolus avec les solutions spécifiques suivantes :
-${problemSolutionMapping}
-Génère une visualisation photoréaliste du même espace après la mise en œuvre de ces solutions.
-La nouvelle image doit clairement montrer comment chaque modification proposée corrige spécifiquement le défaut correspondant, tout en respectant la description et les caractéristiques principales de l'image originale. Maintenez la même perspective et structure de base de l'espace.`;
+${improvementMapping}
 
-    // Combine system and user prompts for better context
+CONSIGNES IMPORTANTES:
+- Conservez exactement la même perspective, angle de vue et structure architecturale de base
+- Rendez les changements clairement visibles et harmonieux
+- La visualisation doit être photoréaliste et professionnelle
+- Respectez le style général de l'espace tout en l'améliorant
+
+Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et convaincant.`;
+
+    // Combine system and user prompts
     const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
     const response = await together.images.create({
@@ -152,6 +224,7 @@ La nouvelle image doit clairement montrer comment chaque modification proposée 
     return {
       success: false,
       error: error.message || "Failed to generate improved version",
+      stack: error.stack
     }
   }
 }
