@@ -2,6 +2,128 @@
 
 import Together from "together-ai"
 
+/**
+ * Analyzes the lighting in an image and returns color-coded areas
+ * @param {string} imageBase64 - Base64 encoded image
+ * @returns {object} Object containing lighting analysis results
+ */
+export async function analyzeLighting(imageBase64) {
+  try {
+    // For server-side Node.js environment
+    // We'll use the 'canvas' package which should be installed via npm
+    // npm install canvas
+    const { createCanvas, loadImage } = require('canvas');
+    
+    // Load the image
+    const img = await loadImage(imageBase64);
+    
+    // Create canvas with image dimensions
+    const canvas = createCanvas(img.width, img.height);
+    const ctx = canvas.getContext('2d');
+    
+    // Draw image to canvas
+    ctx.drawImage(img, 0, 0);
+    
+    // Get image data for processing
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    // Create a new canvas for the overlay
+    const overlayCanvas = createCanvas(img.width, img.height);
+    const overlayCtx = overlayCanvas.getContext('2d');
+    
+    // Draw original image on overlay canvas
+    overlayCtx.drawImage(img, 0, 0);
+    
+    // Create a separate canvas for only the color overlay
+    const colorCanvas = createCanvas(img.width, img.height);
+    const colorCtx = colorCanvas.getContext('2d');
+    
+    // Statistics to track lighting distribution
+    let brightPixels = 0;
+    let mediumPixels = 0;
+    let darkPixels = 0;
+    const totalPixels = canvas.width * canvas.height;
+    
+    // Process each pixel to determine lighting level
+    for (let i = 0; i < data.length; i += 4) {
+      // Calculate brightness using luminance formula
+      // Y = 0.299R + 0.587G + 0.114B
+      const brightness = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
+      
+      // Determine pixel position
+      const pixelIndex = i / 4;
+      const x = pixelIndex % canvas.width;
+      const y = Math.floor(pixelIndex / canvas.width);
+      
+      // Set color based on brightness
+      let color;
+      if (brightness > 0.7) {
+        // Bright areas (more light) - green
+        color = 'rgba(0, 255, 0, 0.5)';
+        brightPixels++;
+      } else if (brightness > 0.3) {
+        // Medium areas (little light) - yellow
+        color = 'rgba(255, 255, 0, 0.5)';
+        mediumPixels++;
+      } else {
+        // Dark areas (no light) - red
+        color = 'rgba(255, 0, 0, 0.5)';
+        darkPixels++;
+      }
+      
+      // Draw a colored pixel on the overlay
+      overlayCtx.fillStyle = color;
+      overlayCtx.fillRect(x, y, 1, 1);
+      
+      // Draw on color-only canvas
+      colorCtx.fillStyle = color;
+      colorCtx.fillRect(x, y, 1, 1);
+    }
+    
+    // Calculate percentages
+    const brightPercentage = Math.round((brightPixels / totalPixels) * 100);
+    const mediumPercentage = Math.round((mediumPixels / totalPixels) * 100);
+    const darkPercentage = Math.round((darkPixels / totalPixels) * 100);
+    
+    // Generate lighting assessment text
+    let lightingAssessment = '';
+    
+    if (darkPercentage > 50) {
+      lightingAssessment = "L'espace est principalement sous-éclairé, nécessitant des améliorations significatives d'éclairage dans la majorité des zones.";
+    } else if (brightPercentage > 50) {
+      lightingAssessment = "L'espace est généralement bien éclairé, avec seulement quelques zones nécessitant des ajustements mineurs.";
+    } else if (mediumPercentage > 40) {
+      lightingAssessment = "L'éclairage de l'espace est modéré, avec des opportunités d'amélioration dans plusieurs zones.";
+    } else {
+      lightingAssessment = "L'espace présente un éclairage inégal, avec un mélange de zones bien éclairées et sous-éclairées nécessitant une approche équilibrée.";
+    }
+    
+    // Create final output with all information
+    return {
+      overlayImage: overlayCanvas.toDataURL(),
+      colorMaskOnly: colorCanvas.toDataURL(),
+      lightingMap: {
+        bright: { color: 'rgba(0, 255, 0, 0.5)', percentage: brightPercentage }, // Green - more light
+        medium: { color: 'rgba(255, 255, 0, 0.5)', percentage: mediumPercentage }, // Yellow - little light
+        dark: { color: 'rgba(255, 0, 0, 0.5)', percentage: darkPercentage }, // Red - no light
+      },
+      assessment: lightingAssessment
+    };
+  } catch (error) {
+    console.error('Error analyzing lighting:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to analyze image lighting',
+    };
+  }
+}
+
+/**
+ * Analyzes an architectural image and returns structured observations and suggestions.
+ * @param {string} imageBase64 Base64 encoded image to analyze.
+ * @returns {Promise<object>} Analysis results or error information.
+ */
 export async function analyzeArchitecturalImage(imageBase64) {
   try {
     const together = new Together({
@@ -149,7 +271,7 @@ Votre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou ap
 }
 
 /**
- * Generates an improved version of an architectural image.
+ * Generates an improved version of an architectural image with lighting analysis.
  * @param {string} imageBase64 The base64 encoded original image.
  * @param {Array<object>} problems Array of problem objects.
  * @param {Array<object>} solutions Array of solution objects.
@@ -166,12 +288,27 @@ export async function generateImprovedVersion(imageBase64, problems, solutions, 
       ? imageBase64.split("base64,")[1]
       : imageBase64
 
+    // First analyze the lighting in the original image
+    const lightingAnalysis = await analyzeLighting(`data:image/jpeg;base64,${base64Image}`);
+    
+    console.log("Lighting analysis completed:", 
+                "Bright: " + lightingAnalysis.lightingMap.bright.percentage + "%", 
+                "Medium: " + lightingAnalysis.lightingMap.medium.percentage + "%", 
+                "Dark: " + lightingAnalysis.lightingMap.dark.percentage + "%");
+
     const problemsSummary = problems.map(p => p.title).join(", ")
     const solutionsSummary = solutions.map(s => s.title).join(", ")
 
-    // System prompt that defines the AI's role without examples
-    const systemPrompt = `Vous êtes un expert en design d'intérieur et visualisation 3D qui crée des rendus réalistes d'espaces améliorés. 
-Votre tâche est de générer une visualisation photoréaliste qui montre l'espace avec les améliorations suggérées, tout en préservant la structure, l'échelle et la perspective originales.`;
+    // Enhanced system prompt with lighting information
+    const systemPrompt = `Vous êtes un expert en design d'intérieur et visualisation 3D qui crée des rendus réalistes d'espaces améliorés.
+Votre tâche est de générer une visualisation photoréaliste qui montre l'espace avec les améliorations suggérées, tout en préservant la structure, l'échelle et la perspective originales.
+
+Une analyse d'éclairage a été effectuée sur l'image originale, avec les résultats suivants:
+- Zones bien éclairées (en vert): ${lightingAnalysis.lightingMap.bright.percentage}% de l'image
+- Zones moyennement éclairées (en jaune): ${lightingAnalysis.lightingMap.medium.percentage}% de l'image
+- Zones sombres (en rouge): ${lightingAnalysis.lightingMap.dark.percentage}% de l'image
+
+${lightingAnalysis.assessment}`;
 
     // Create problem-solution pairs mapping
     const problemsList = problemsSummary.split(',').map(p => p.trim());
@@ -181,14 +318,15 @@ Votre tâche est de générer une visualisation photoréaliste qui montre l'espa
     let improvementMapping = "";
     
     for (let i = 0; i < problemsList.length; i++) {
-      const solution = i < solutionsList.length 
-        ? solutionsList[i] 
+      
+      const solution = i < solutionsList.length
+        ? solutionsList[i]
         : "Amélioration générale de l'espace";
       
       improvementMapping += `${i+1}. Problème: "${problemsList[i]}" → Application visuelle: "${solution}"\n`;
     }
 
-    // User prompt with focused instructions on visual transformation
+    // Enhanced user prompt with lighting instructions
     const userPrompt = `Description de l'espace original:
 ${descriptionImageOriginale}
 
@@ -201,6 +339,11 @@ CONSIGNES IMPORTANTES:
 - Rendez les changements clairement visibles et harmonieux
 - La visualisation doit être photoréaliste et professionnelle
 - Respectez le style général de l'espace tout en l'améliorant
+
+AMÉLIORATIONS D'ÉCLAIRAGE SPÉCIFIQUES:
+- Zones vertes (${lightingAnalysis.lightingMap.bright.percentage}% de l'image): Maintenir le bon niveau d'éclairage existant
+- Zones jaunes (${lightingAnalysis.lightingMap.medium.percentage}% de l'image): Renforcer légèrement l'éclairage pour une meilleure visibilité
+- Zones rouges (${lightingAnalysis.lightingMap.dark.percentage}% de l'image): Ajouter des sources d'éclairage significatives pour éliminer les zones d'ombre
 
 Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et convaincant.`;
 
@@ -218,6 +361,15 @@ Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et c
     return {
       success: true,
       generatedImage: response.data[0].url,
+      lightingAnalysis: {
+        assessment: lightingAnalysis.assessment,
+        statistics: {
+          brightAreas: lightingAnalysis.lightingMap.bright.percentage + '%',
+          mediumAreas: lightingAnalysis.lightingMap.medium.percentage + '%',
+          darkAreas: lightingAnalysis.lightingMap.dark.percentage + '%'
+        },
+        overlayImage: lightingAnalysis.overlayImage
+      }
     }
   } catch (error) {
     console.error("Error generating improved version:", error)
