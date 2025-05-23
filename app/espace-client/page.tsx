@@ -30,6 +30,34 @@ interface AnalysisResult {
   solutions: Solution[];
 }
 
+// Define expected return type for analyzeArchitecturalImage
+interface AnalyzeImageSuccessResponse {
+  success: true;
+  analysis: AnalysisResult;
+}
+interface AnalyzeImageErrorResponse {
+  success: false;
+  error: string;
+  rawResponse?: string; // Optional: if you want to pass the raw response on error
+  receivedStructure?: string; // Optional
+}
+type AnalyzeImageResponse = AnalyzeImageSuccessResponse | AnalyzeImageErrorResponse;
+
+// Define expected return type for generateImprovedVersion
+interface GenerateImageSuccessResponse {
+  success: true;
+  generatedImage: string;
+  lightingAnalysis?: any; // Can be more specific if needed
+}
+interface GenerateImageErrorResponse {
+  success: false;
+  error: string;
+  rawResponse?: string; // Add rawResponse here for consistency
+  stack?: string; // Optional
+  details?: any; // Optional, for passing lightingAnalysis failure details
+}
+type GenerateImageResponse = GenerateImageSuccessResponse | GenerateImageErrorResponse;
+
 interface BeforeAfterState {
   before: string | null;
   after: string | null;
@@ -43,6 +71,13 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [beforeAfterImages, setBeforeAfterImages] = useState<BeforeAfterState | null>(null)
+  // Store original inputs for regeneration
+  const [originalInputs, setOriginalInputs] = useState<{
+    imageBase64: string;
+    problems: Problem[];
+    solutions: Solution[];
+    descriptionImageOriginale: string;
+  } | null>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) {
@@ -66,6 +101,7 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
       setAnalysis(null)
       setError(null)
       setBeforeAfterImages(null)
+      setOriginalInputs(null); // Reset original inputs on new image upload
     }
   }
 
@@ -77,10 +113,17 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
 
     try {
       // Call the Together AI service to analyze the image
-      const result = await analyzeArchitecturalImage(previewUrl)
+      const result = await analyzeArchitecturalImage(previewUrl) as AnalyzeImageResponse
       
       if (result.success) {
         setAnalysis(result.analysis)
+        // Store inputs for regeneration
+        setOriginalInputs({
+          imageBase64: previewUrl,
+          problems: result.analysis.problems,
+          solutions: result.analysis.solutions,
+          descriptionImageOriginale: result.analysis.descriptionImageOriginale || "Description non fournie",
+        });
         
         // Set before image
         setBeforeAfterImages({
@@ -97,7 +140,7 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
             result.analysis.problems, 
             result.analysis.solutions,
             descriptionImageOriginale // Pass the new description
-          )
+          ) as GenerateImageResponse
           
           if (improvedResult.success) {
             setBeforeAfterImages(prev => ({
@@ -122,6 +165,11 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
         }
       } else {
         setError(result.error || "Failed to analyze the image.")
+        // Log the raw response if available for debugging JSON parsing issues
+        if (result.rawResponse) {
+          console.error("Raw AI Response (analyzeArchitecturalImage):");
+          console.error(result.rawResponse);
+        }
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.")
@@ -130,6 +178,47 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
       setIsAnalyzing(false)
     }
   }
+
+  const regenerateImprovedVersion = async () => {
+    if (!originalInputs) {
+      setError("Original analysis data is not available for regeneration.");
+      return;
+    }
+
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      const improvedResult = await generateImprovedVersion(
+        originalInputs.imageBase64,
+        originalInputs.problems,
+        originalInputs.solutions,
+        originalInputs.descriptionImageOriginale
+      ) as GenerateImageResponse;
+
+      if (improvedResult.success) {
+        setBeforeAfterImages(prev => ({
+          before: prev!.before, // Keep the original 'before' image
+          after: improvedResult.generatedImage
+        }));
+      } else {
+        setError(improvedResult.error || "Failed to regenerate the improved image.");
+        // Log raw response or details if available from regeneration error
+        if (improvedResult.details && improvedResult.details.rawResponse) { // Check if details contains rawResponse
+            console.error("Raw AI Response (regenerateImprovedVersion - from lighting analysis failure):");
+            console.error(improvedResult.details.rawResponse);
+        } else if (improvedResult.rawResponse) { // Direct rawResponse on improvedResult error (if generateImprovedVersion adds it)
+            console.error("Raw AI Response (regenerateImprovedVersion):");
+            console.error(improvedResult.rawResponse);
+        }
+      }
+    } catch (genError) {
+      console.error("Regeneration error:", genError);
+      setError("An unexpected error occurred during regeneration. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   useEffect(() => {
     // Clean up object URLs when component unmounts
@@ -309,51 +398,50 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
               </TabsContent>
 
               <TabsContent value="visualization">
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="border rounded-lg overflow-hidden">
-                      <div className="p-2">
-                        <img 
-                          src={beforeAfterImages?.before || "/placeholder.jpg"} 
-                          alt="Before" 
-                          className="w-full h-auto rounded-md"
-                        />
-                      </div>
-                      <div className="p-4 bg-muted">
-                        <h3 className="font-medium text-center">Current Space</h3>
-                      </div>
+                {beforeAfterImages ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                    <div>
+                      <h4 className="text-lg font-semibold mb-2 text-center">Before</h4>
+                      <img 
+                        src={beforeAfterImages.before!} 
+                        alt="Original space" 
+                        className="w-full rounded-lg shadow-md"
+                      />
                     </div>
-                    
-                    <div className="border rounded-lg overflow-hidden">
-                      <div className="p-2">
+                    <div>
+                      <h4 className="text-lg font-semibold mb-2 text-center">After (Improved)</h4>
+                      {isGenerating && !beforeAfterImages.after?.includes('placeholder.jpg') && ( // Show spinner only if generating and not placeholder
+                        <div className="flex flex-col items-center justify-center h-full">
+                          <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
+                          <p className="text-muted-foreground">Generating new version...</p>
+                        </div>
+                      )}
+                      {(!isGenerating || beforeAfterImages.after?.includes('placeholder.jpg')) && beforeAfterImages.after && (
+                         <img 
+                           src={beforeAfterImages.after} 
+                           alt="Improved space" 
+                           className="w-full rounded-lg shadow-md"
+                         />
+                      )}
+                       <Button 
+                        onClick={regenerateImprovedVersion} 
+                        disabled={isGenerating || !originalInputs}
+                        className="w-full mt-4"
+                      >
                         {isGenerating ? (
-                          <div className="flex items-center justify-center h-64 bg-gray-100 rounded-md">
-                            <div className="text-center">
-                              <Loader2 className="h-12 w-12 animate-spin mx-auto mb-2 text-muted-foreground" />
-                              <p className="text-sm text-muted-foreground">Generating improved design...</p>
-                            </div>
-                          </div>
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Regenerating...
+                          </>
                         ) : (
-                          <img 
-                            src={beforeAfterImages?.after || "/placeholder.jpg"} 
-                            alt="After" 
-                            className="w-full h-auto rounded-md"
-                          />
+                          "Regenerate Improved Version"
                         )}
-                      </div>
-                      <div className="p-4 bg-muted">
-                        <h3 className="font-medium text-center">AI Visualized Improvements</h3>
-                      </div>
+                      </Button>
                     </div>
                   </div>
-                  
-                  <div className="p-4 bg-blue-50 text-blue-800 rounded-lg">
-                    <p className="text-sm">
-                      <strong>Note:</strong> This visualization represents a conceptual interpretation of the recommended improvements.
-                      Actual results may vary based on specific implementation details.
-                    </p>
-                  </div>
-                </div>
+                ) : (
+                  <p>Visualization will appear here once analysis is complete.</p>
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>

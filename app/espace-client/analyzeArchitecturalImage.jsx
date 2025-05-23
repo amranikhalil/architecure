@@ -189,56 +189,60 @@ Votre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou ap
     const analysisText = response.choices[0].message.content;
     let analysisJson;
 
-    try {
-      // First try: extract JSON using regex for most common pattern
-      const jsonPattern = /\{[\s\S]*\}/;
-      const jsonMatch = analysisText.match(jsonPattern);
-      
-      if (jsonMatch && jsonMatch[0]) {
-        console.log("Attempting to parse JSON with primary method:", jsonMatch[0].substring(0, 100) + "...");
-        analysisJson = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error("No valid JSON block found with primary method");
-      }
-    } catch (parseError) {
-      console.error("Error parsing AI response JSON with primary method:", parseError);
-      
-      // Second try: clean up markdown and other formatting
+    // Function to attempt parsing and log attempts
+    const tryParseJson = (text, attemptName) => {
       try {
-        const cleanedText = analysisText
-          .replace(/```json|```/g, '')  // Remove markdown code blocks
-          .replace(/^[\s\S]*?(\{)/m, '{')  // Remove any text before first {
-          .replace(/\}[\s\S]*$/m, '}')     // Remove any text after last }
-          .trim();
-          
-        if (cleanedText.startsWith('{') && cleanedText.endsWith('}')) {
-          console.log("Attempting to parse JSON with secondary method:", cleanedText.substring(0, 100) + "...");
-          analysisJson = JSON.parse(cleanedText);
-        } else {
-          throw new Error("Secondary JSON extraction failed");
-        }
-      } catch (secondaryError) {
-        // Third try: handle case where model might have wrapped the JSON in quotes
-        try {
-          const unquotedText = analysisText
-            .replace(/^["']|["']$/g, '')  // Remove surrounding quotes
-            .replace(/\\"/g, '"')         // Replace escaped quotes
-            .trim();
-            
-          if (unquotedText.startsWith('{') && unquotedText.endsWith('}')) {
-            console.log("Attempting to parse JSON with tertiary method:", unquotedText.substring(0, 100) + "...");
-            analysisJson = JSON.parse(unquotedText);
-          } else {
-            throw new Error("Tertiary JSON extraction failed");
-          }
-        } catch (tertiaryError) {
-          return {
-            success: false,
-            error: `Failed to parse AI analysis. Detail: ${parseError.message}.`,
-            rawResponse: analysisText // Include raw response for debugging
-          };
-        }
+        console.log(`Attempting to parse JSON with ${attemptName} method:`, text.substring(0, 150) + (text.length > 150 ? "..." : ""));
+        return JSON.parse(text);
+      } catch (e) {
+        console.warn(`Parsing with ${attemptName} method failed:`, e.message);
+        return null;
       }
+    };
+
+    // Attempt 1: Direct extraction and parse (with minor common fixes)
+    const jsonPattern = /\{[\s\S]*\}/;
+    const jsonMatch = analysisText.match(jsonPattern);
+    let potentialJson = "";
+
+    if (jsonMatch && jsonMatch[0]) {
+      potentialJson = jsonMatch[0].replace(/\\'/g, "'"); // Fix mis-escaped apostrophes
+      analysisJson = tryParseJson(potentialJson, "primary (regex + apostrophe fix)");
+    }
+
+    // Attempt 2: If primary fails, try more aggressive cleaning
+    if (!analysisJson) {
+      let cleanedText = analysisText
+        .replace(/```json|```/g, '') // Remove markdown code blocks
+        .replace(/^[\s\S]*?(\{)/m, '{')  // Remove any text before first {
+        .replace(/\}([\s\S]*)$/m, '}')     // Remove any text after last }
+        .replace(/\\"/g, '"')         // Replace escaped quotes " -> "
+        .replace(/\\\//g, '/')         // Replace escaped slashes \/ -> /
+        .replace(/\\'/g, "'")          // Re-apply apostrophe fix
+        .trim();
+      
+      analysisJson = tryParseJson(cleanedText, "secondary (aggressive cleaning)");
+    }
+
+    // Attempt 3: If model wrapped the whole thing in quotes (less common but possible)
+    if (!analysisJson && (analysisText.startsWith('"') && analysisText.endsWith('"'))) {
+        try {
+            const unquotedText = JSON.parse(analysisText); // This parses the outer quotes
+            if (typeof unquotedText === 'string') { // And if the content IS a string that IS json
+                 analysisJson = tryParseJson(unquotedText, "tertiary (unquote then parse)");
+            }
+        } catch (e) {
+            console.warn("Tertiary parsing (unquoting outer string) failed:", e.message);
+        }
+    }
+
+    if (!analysisJson) {
+      console.error("All attempts to parse AI response JSON failed.", analysisText);
+      return {
+        success: false,
+        error: "Failed to parse AI analysis. The response was not valid JSON even after cleaning attempts.",
+        rawResponse: analysisText // Include raw response for debugging
+      };
     }
 
     // Validate the JSON structure has the required fields
@@ -291,10 +295,24 @@ export async function generateImprovedVersion(imageBase64, problems, solutions, 
     // First analyze the lighting in the original image
     const lightingAnalysis = await analyzeLighting(`data:image/jpeg;base64,${base64Image}`);
     
+    // Add this check to ensure lightingAnalysis is valid
+    if (!lightingAnalysis || lightingAnalysis.success === false || !lightingAnalysis.lightingMap) {
+      console.error("Lighting analysis failed or returned an unexpected structure:", lightingAnalysis);
+      return {
+        success: false,
+        error: lightingAnalysis?.error || "Lighting analysis failed and did not return the expected structure.",
+        details: lightingAnalysis // Include the actual response for debugging
+      };
+    }
+    
     console.log("Lighting analysis completed:", 
                 "Bright: " + lightingAnalysis.lightingMap.bright.percentage + "%", 
                 "Medium: " + lightingAnalysis.lightingMap.medium.percentage + "%", 
                 "Dark: " + lightingAnalysis.lightingMap.dark.percentage + "%");
+    // Log the assessment from analyzeLighting
+    if (lightingAnalysis.assessment) {
+        console.log("Lighting Assessment from analyzeLighting:", lightingAnalysis.assessment);
+    }
 
     const problemsSummary = problems.map(p => p.title).join(", ")
     const solutionsSummary = solutions.map(s => s.title).join(", ")
@@ -347,6 +365,16 @@ AMÉLIORATIONS D'ÉCLAIRAGE SPÉCIFIQUES:
 
 Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et convaincant.`;
 
+    // Log the prompts to verify lighting analysis usage
+    console.log("\n--- System Prompt for Image Generation ---");
+    console.log(systemPrompt);
+    console.log("--- User Prompt Lighting Instructions for Image Generation ---");
+    console.log(`AMÉLIORATIONS D'ÉCLAIRAGE SPÉCIFIQUES:
+- Zones vertes (${lightingAnalysis.lightingMap.bright.percentage}% de l'image): Maintenir le bon niveau d'éclairage existant
+- Zones jaunes (${lightingAnalysis.lightingMap.medium.percentage}% de l'image): Renforcer légèrement l'éclairage pour une meilleure visibilité
+- Zones rouges (${lightingAnalysis.lightingMap.dark.percentage}% de l'image): Ajouter des sources d'éclairage significatives pour éliminer les zones d'ombre`);
+    console.log("-----------------------------------------\n");
+
     // Combine system and user prompts
     const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
@@ -373,9 +401,18 @@ Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et c
     }
   } catch (error) {
     console.error("Error generating improved version:", error)
+    let rawResponseContent = "";
+    if (error.response && error.response.data) {
+        // If the error object has a response from an API call (e.g., Axios)
+        rawResponseContent = typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data);
+    } else if (error.message) {
+        rawResponseContent = error.message;
+    }
+
     return {
       success: false,
       error: error.message || "Failed to generate improved version",
+      rawResponse: rawResponseContent, // Include raw response or error message
       stack: error.stack
     }
   }
