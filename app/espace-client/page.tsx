@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Upload, Scan, AlertCircle, Check, Loader2 } from "lucide-react"
+import { Upload, Scan, AlertCircle, Check, Loader2, Sun } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { analyzeArchitecturalImage, generateImprovedVersion } from "./analyzeArchitecturalImage"
+import { processImage } from "../../lib/image-processor"
 
 // Define interfaces for our state
 interface Problem {
@@ -79,6 +80,11 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
     descriptionImageOriginale: string;
   } | null>(null);
 
+  // State for heatmap
+  const [heatmapImageUrl, setHeatmapImageUrl] = useState<string | null>(null);
+  const [isProcessingHeatmap, setIsProcessingHeatmap] = useState(false);
+  const [heatmapError, setHeatmapError] = useState<string | null>(null);
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) {
       // setError("No file selected."); // Optionally set an error
@@ -102,6 +108,8 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
       setError(null)
       setBeforeAfterImages(null)
       setOriginalInputs(null); // Reset original inputs on new image upload
+      setHeatmapImageUrl(null); // Reset heatmap on new image upload
+      setHeatmapError(null); // Reset heatmap error
     }
   }
 
@@ -220,14 +228,38 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
     }
   };
 
+  const generateLightHeatmap = async () => {
+    if (!image) {
+      setHeatmapError("Please upload an image first.");
+      return;
+    }
+
+    setIsProcessingHeatmap(true);
+    setHeatmapError(null);
+    setHeatmapImageUrl(null);
+
+    try {
+      const dataUrl = await processImage(image);
+      setHeatmapImageUrl(dataUrl);
+    } catch (err: any) {
+      console.error("Heatmap generation error:", err);
+      setHeatmapError(err.message || "Failed to generate light heatmap.");
+    } finally {
+      setIsProcessingHeatmap(false);
+    }
+  };
+
   useEffect(() => {
     // Clean up object URLs when component unmounts
     return () => {
       if (previewUrl && previewUrl.startsWith('blob:')) {
         URL.revokeObjectURL(previewUrl)
       }
+      if (heatmapImageUrl && heatmapImageUrl.startsWith('blob:')) { // Clean up heatmap URL too
+        URL.revokeObjectURL(heatmapImageUrl);
+      }
     }
-  }, [previewUrl])
+  }, [previewUrl, heatmapImageUrl])
 
   return (
     <div className="w-full max-w-4xl mx-auto">
@@ -255,6 +287,8 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
                       setImage(null)
                       setPreviewUrl(null)
                       setAnalysis(null)
+                      setHeatmapImageUrl(null); // Reset heatmap
+                      setHeatmapError(null);
                     }}
                     className="mt-4"
                   >
@@ -323,10 +357,11 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="problems">
-              <TabsList className="mb-4">
+              <TabsList className="mb-4 grid w-full grid-cols-4">
                 <TabsTrigger value="problems">Identified Problems</TabsTrigger>
                 <TabsTrigger value="solutions">Recommended Solutions</TabsTrigger>
                 <TabsTrigger value="visualization">Before & After</TabsTrigger>
+                <TabsTrigger value="heatmap">Light Heatmap</TabsTrigger>
               </TabsList>
 
               <TabsContent value="problems" className="space-y-4">
@@ -443,6 +478,66 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
                   <p>Visualization will appear here once analysis is complete.</p>
                 )}
               </TabsContent>
+              
+              <TabsContent value="heatmap">
+                <div className="flex flex-col items-center justify-center space-y-4">
+                  {!heatmapImageUrl && image && (
+                    <Button 
+                      onClick={generateLightHeatmap} 
+                      disabled={isProcessingHeatmap}
+                      className="w-full max-w-xs"
+                    >
+                      {isProcessingHeatmap ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Generating Heatmap...
+                        </>
+                      ) : (
+                        <>
+                          <Sun className="mr-2 h-4 w-4" />
+                          Generate Light Concentration Heatmap
+                        </>
+                      )}
+                    </Button>
+                  )}
+
+                  {heatmapError && (
+                    <Alert variant="destructive" className="w-full max-w-md">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Heatmap Error</AlertTitle>
+                      <AlertDescription>{heatmapError}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  {heatmapImageUrl && (
+                    <div className="w-full text-center">
+                      <h4 className="text-lg font-semibold mb-2">Light Concentration Heatmap</h4>
+                      <img 
+                        src={heatmapImageUrl} 
+                        alt="Light concentration heatmap" 
+                        className="w-full max-w-md mx-auto rounded-lg shadow-md"
+                      />
+                       <Button 
+                          variant="outline"
+                          onClick={generateLightHeatmap} // Allow regeneration
+                          disabled={isProcessingHeatmap}
+                          className="mt-4"
+                        >
+                          {isProcessingHeatmap ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Regenerating...
+                            </>
+                          ) : (
+                            "Regenerate Heatmap"
+                          )}
+                      </Button>
+                    </div>
+                  )}
+                  {!image && <p className="text-muted-foreground">Please upload an image to generate a heatmap.</p>}
+                </div>
+              </TabsContent>
+
             </Tabs>
           </CardContent>
         </Card>
