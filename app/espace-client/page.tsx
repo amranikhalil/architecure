@@ -231,7 +231,7 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <Card className="mb-6">
+      <Card className="mb-6 mt-3">
         <CardHeader>
           <CardTitle>Architecture AI Analysis</CardTitle>
           <CardDescription>
