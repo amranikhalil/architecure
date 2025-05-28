@@ -6,6 +6,9 @@ import { Bell } from "lucide-react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
 import "./globals.css"
+import { useState } from "react"
+import dynamic from "next/dynamic"
+const AuthModal = dynamic(() => import("@/components/AuthModal"), { ssr: false })
 
 export default function ClientLayout({
   children,
@@ -14,6 +17,7 @@ export default function ClientLayout({
   children: React.ReactNode
   inter: any
 }) {
+  const [showAuth, setShowAuth] = useState(false)
   return (
     <html lang="fr" suppressHydrationWarning>
       <body className={cn("min-h-screen bg-background font-sans antialiased", inter.className)}>
@@ -31,8 +35,14 @@ export default function ClientLayout({
                 <Link href="/espace-client" className="hover:text-copper-dark transition">Espace Client</Link>
                 <Link href="#" className="hover:text-copper-dark transition">Espace Architecte</Link>
               </div>
-              <Link href="#" className="px-5 py-2 rounded-full bg-copper text-white font-semibold shadow hover:bg-copper-dark transition border border-copper/30">Se connecter</Link>
+              <button
+                onClick={() => setShowAuth(true)}
+                className="px-5 py-2 rounded-full bg-copper text-white font-semibold shadow hover:bg-copper-dark transition border border-copper/30"
+              >
+                Se connecter
+              </button>
             </nav>
+            {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
             <main className="flex-1">{children}</main>
             <footer className="border-t py-6 md:py-0">
               <div className="container flex flex-col items-center justify-between gap-4 md:h-16 md:flex-row">

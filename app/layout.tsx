@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata = {
   title: "Simulation et Recommandations",
   description: "Application web de simulation et de recommandations pour l'architecture et le design d'intérieur",
-    generator: 'v0.dev'
+  generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -15,8 +15,14 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  return <ClientLayout children={children} inter={inter} />
+  // Server Component: do not use any client-side logic here
+  return (
+    <html lang="fr" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ClientLayout inter={inter}>{children}</ClientLayout>
+      </body>
+    </html>
+  )
 }
-
 
 import './globals.css'
