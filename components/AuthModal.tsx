@@ -1,27 +1,37 @@
 "use client"
 import { useState } from "react"
-import { supabase } from "@/lib/supabaseClient"
+import { useAuth } from "@/lib/authContext"
 
 export default function AuthModal({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [name, setName] = useState("")
   const [isLogin, setIsLogin] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  const { signIn, signUp } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    
     if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { error } = await signIn(email, password)
       if (error) setError(error.message)
       else onClose()
     } else {
-      const { error } = await supabase.auth.signUp({ email, password })
+      if (!name.trim()) {
+        setError("Le nom est requis")
+        setLoading(false)
+        return
+      }
+      const { error } = await signUp(email, password, name)
       if (error) setError(error.message)
       else onClose()
     }
+    
     setLoading(false)
   }
 
@@ -39,6 +49,16 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
             onChange={e => setEmail(e.target.value)}
             required
           />
+          {!isLogin && (
+            <input
+              type="text"
+              placeholder="Nom"
+              className="w-full border rounded px-3 py-2"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              required
+            />
+          )}
           <input
             type="password"
             placeholder="Mot de passe"

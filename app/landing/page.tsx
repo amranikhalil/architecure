@@ -1,8 +1,22 @@
 "use client"
 import Link from "next/link"
 import { ArrowRight, BookOpen, Home, Search } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/authContext"
+import ClientPreview from "./client-preview"
 
 export default function LandingPage() {
+  const { user } = useAuth()
+  const router = useRouter()
+  
+  const handleClientAccess = () => {
+    if (user) {
+      router.push('/espace-client')
+    } else {
+      // Scroll to client preview section
+      document.getElementById('client-preview')?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-stone-200 via-[#e7c9b2] to-[#b87333] flex flex-col">
       {/* Universal Header */}
@@ -112,11 +126,12 @@ export default function LandingPage() {
               </ul>
             </div>
             <div className="p-6 pt-0">
-              <Link href="/espace-client" className="w-full block">
-                <button className="w-full rounded-full font-semibold text-base py-2 transition-transform hover:scale-105 bg-copper text-white shadow-md border-0 hover:bg-copper-dark">
-                  Accéder à l'Espace Client
-                </button>
-              </Link>
+              <button 
+                onClick={handleClientAccess}
+                className="w-full rounded-full font-semibold text-base py-2 transition-transform hover:scale-105 bg-copper text-white shadow-md border-0 hover:bg-copper-dark"
+              >
+                {user ? "Accéder à l'Espace Client" : "Découvrir l'Espace Client"}
+              </button>
             </div>
           </div>
         </div>
@@ -147,6 +162,10 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
+        </div>
+        
+        <div id="client-preview" className="w-full mt-12 mb-16">
+          <ClientPreview />
         </div>
       </main>
       {/* Custom styles for copper color */}
