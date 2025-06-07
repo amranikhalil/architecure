@@ -7,8 +7,17 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { analyzeArchitecturalImage, generateImprovedVersion } from "./analyzeArchitecturalImage"
 import { processImage } from "../../lib/image-processor"
+import { generateImprovedVersion } from "./analyzeArchitecturalImage"
+
+
+const heatmapColors = [
+  { color: "#0000ff", label: "Faible intensité (Bleu)" },
+  { color: "#00ff00", label: "Intensité moyenne-basse (Vert)" },
+  { color: "#ffff00", label: "Intensité moyenne (Jaune)" },
+  { color: "#ffa500", label: "Haute intensité (Orange)" },
+  { color: "#ff0000", label: "Très haute intensité (Rouge)" },
+];
 
 // Define interfaces for our state
 interface Problem {
@@ -120,9 +129,14 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
     setError(null)
 
     try {
-      // Call the Together AI service to analyze the image
-      const result = await analyzeArchitecturalImage(previewUrl) as AnalyzeImageResponse
-      
+      // Call the new API route
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: previewUrl }),
+      });
+      const result = await response.json();
+
       if (result.success) {
         setAnalysis(result.analysis)
         // Store inputs for regeneration
@@ -132,31 +146,25 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
           solutions: result.analysis.solutions,
           descriptionImageOriginale: result.analysis.descriptionImageOriginale || "Description non fournie",
         });
-        
-        // Set before image
         setBeforeAfterImages({
           before: previewUrl,
-          after: "/placeholder.jpg", // Using a local placeholder image instead of API endpoint
+          after: "/placeholder.jpg",
         })
-        
-        // Now generate the improved version
         setIsGenerating(true)
         try {
-          const descriptionImageOriginale = result.analysis.descriptionImageOriginale || "Description non fournie"; // Fallback if not present
+          const descriptionImageOriginale = result.analysis.descriptionImageOriginale || "Description non fournie";
           const improvedResult = await generateImprovedVersion(
-            previewUrl, 
-            result.analysis.problems, 
+            previewUrl,
+            result.analysis.problems,
             result.analysis.solutions,
-            descriptionImageOriginale // Pass the new description
+            descriptionImageOriginale
           ) as GenerateImageResponse
-          
           if (improvedResult.success) {
             setBeforeAfterImages(prev => ({
               before: prev!.before,
               after: improvedResult.generatedImage
             }))
           } else {
-            // If generation fails, use a placeholder
             setBeforeAfterImages(prev => ({
               before: prev!.before,
               after: "/placeholder.jpg"
@@ -173,7 +181,6 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
         }
       } else {
         setError(result.error || "Failed to analyze the image.")
-        // Log the raw response if available for debugging JSON parsing issues
         if (result.rawResponse) {
           console.error("Raw AI Response (analyzeArchitecturalImage):");
           console.error(result.rawResponse);
@@ -536,6 +543,23 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
                   )}
                   {!image && <p className="text-muted-foreground">Please upload an image to generate a heatmap.</p>}
                 </div>
+                 <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", margin: "20px 0" }}>
+                    {heatmapColors.map((item, index) => (
+                      <div key={index} style={{ display: "flex", alignItems: "center" }}>
+                        <div
+                          style={{
+                            width: "30px",
+                            height: "30px",
+                            backgroundColor: item.color,
+                            border: "1px solid #ccc",
+                            marginRight: "10px",
+                            borderRadius: "4px",
+                          }}
+                        ></div>
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
               </TabsContent>
 
             </Tabs>
