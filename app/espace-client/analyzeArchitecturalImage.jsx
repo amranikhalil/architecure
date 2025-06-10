@@ -148,7 +148,7 @@ Vous devez toujours répondre avec un JSON valide sans aucun texte avant ou apr�
     // User prompt without examples
     const userPrompt = `Analysez cette image d'espace et fournissez un objet JSON comprenant:
 
-1. "descriptionImageOriginale": une brève description objective de l'espace visualisé.
+1. "descriptionImageOriginale": Décris précisément cette image pour une génération IA fidèle, en donnant dimensions, perspective, style, disposition, couleurs, ambiance, orientation, etc..
 
 2. "problems": un tableau d'au moins 3 observations constructives. Chaque élément doit contenir:
    - "title": un titre court et précis du problème
@@ -164,32 +164,44 @@ Vous devez toujours répondre avec un JSON valide sans aucun texte avant ou apr�
 
 Votre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou après.`;
 
-    const response = await together.chat.completions.create({
-      model: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo",
-      max_tokens: 2048,
-      temperature: 0.3, // Slightly increased for more creative responses
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: userPrompt,
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/jpeg;base64,${base64Image}`,
-              },
-            },
-          ],
-        },
-      ],
-    })
+    // const response = await together.chat.completions.create({
+    //   model: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo",
+    //   max_tokens: 2048,
+    //   temperature: 0.3, // Slightly increased for more creative responses
+    //   messages: [
+    //     {
+    //       role: "system",
+    //       content: systemPrompt
+    //     },
+    //     {
+    //       role: "user",
+    //       content: [
+    //         {
+    //           type: "text",
+    //           text: userPrompt,
+    //         },
+    //         {
+    //           type: "image_url",
+    //           image_url: {
+    //             url: `data:image/jpeg;base64,${base64Image}`,
+    //           },
+    //         },
+    //       ],
+    //     },
+    //   ],
+    // })
+    const response = await openai.chat.completions.create({
+    model: "gpt-4o", // ou "gpt-4-vision-preview"
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: systemPrompt },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Image}` } }
+        ]
+      }
+    ]
+  });
 
     const analysisText = response.choices[0].message.content;
     let analysisJson;
@@ -363,8 +375,7 @@ ${lightingAnalysis.assessment}`;
     const userPrompt = `Description de l'espace original:
 ${descriptionImageOriginale}
 
-Problèmes identifiés:
-${problemsSummary}
+
 
 Créez une visualisation photoréaliste qui intègre les améliorations suivantes:
 
