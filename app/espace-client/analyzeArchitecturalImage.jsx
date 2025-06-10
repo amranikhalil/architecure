@@ -1,6 +1,11 @@
 "use server"
-
+import OpenAI from "openai"
 import Together from "together-ai"
+
+// Initialize OpenAI with your API key
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY, // Use the API key from your environment variables
+});
 
 /**
  * Analyzes the lighting in an image and returns color-coded areas
@@ -189,7 +194,7 @@ Votre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou ap
     const analysisText = response.choices[0].message.content;
     let analysisJson;
 
-    // Function to attempt parsing and log attempts
+    // Enhanced JSON parsing with better error handling
     const tryParseJson = (text, attemptName) => {
       try {
         console.log(`Attempting to parse JSON with ${attemptName} method:`, text.substring(0, 150) + (text.length > 150 ? "..." : ""));
@@ -200,47 +205,57 @@ Votre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou ap
       }
     };
 
-    // Attempt 1: Direct extraction and parse (with minor common fixes)
-    const jsonPattern = /\{[\s\S]*\}/;
-    const jsonMatch = analysisText.match(jsonPattern);
-    let potentialJson = "";
-
-    if (jsonMatch && jsonMatch[0]) {
-      potentialJson = jsonMatch[0].replace(/\\'/g, "'"); // Fix mis-escaped apostrophes
-      analysisJson = tryParseJson(potentialJson, "primary (regex + apostrophe fix)");
-    }
-
-    // Attempt 2: If primary fails, try more aggressive cleaning
-    if (!analysisJson) {
-      let cleanedText = analysisText
+    // Enhanced cleaning function to handle escaped characters
+    const cleanJsonText = (text) => {
+      return text
         .replace(/```json|```/g, '') // Remove markdown code blocks
         .replace(/^[\s\S]*?(\{)/m, '{')  // Remove any text before first {
         .replace(/\}([\s\S]*)$/m, '}')     // Remove any text after last }
-        .replace(/\\"/g, '"')         // Replace escaped quotes " -> "
+        .replace(/\\"/g, '"')         // Replace escaped quotes \" -> "
         .replace(/\\\//g, '/')         // Replace escaped slashes \/ -> /
-        .replace(/\\'/g, "'")          // Re-apply apostrophe fix
+        .replace(/\\'/g, "'")          // Replace escaped apostrophes \' -> '
+        .replace(/\\\[/g, '[')         // Replace escaped brackets \[ -> [
+        .replace(/\\\]/g, ']')         // Replace escaped brackets \] -> ]
+        .replace(/\\\{/g, '{')         // Replace escaped braces \{ -> {
+        .replace(/\\\}/g, '}')         // Replace escaped braces \} -> }
+        .replace(/\\n/g, '\n')         // Replace escaped newlines
+        .replace(/\\t/g, '\t')         // Replace escaped tabs
         .trim();
-      
-      analysisJson = tryParseJson(cleanedText, "secondary (aggressive cleaning)");
+    };
+
+    // Attempt 1: Direct parsing with enhanced cleaning
+    const jsonPattern = /\{[\s\S]*\}/;
+    const jsonMatch = analysisText.match(jsonPattern);
+    
+    if (jsonMatch && jsonMatch[0]) {
+      const cleanedJson = cleanJsonText(jsonMatch[0]);
+      analysisJson = tryParseJson(cleanedJson, "primary (enhanced cleaning)");
     }
 
-    // Attempt 3: If model wrapped the whole thing in quotes (less common but possible)
+    // Attempt 2: If primary fails, try parsing the entire response after cleaning
+    if (!analysisJson) {
+      const fullyCleanedText = cleanJsonText(analysisText);
+      analysisJson = tryParseJson(fullyCleanedText, "secondary (full text cleaning)");
+    }
+
+    // Attempt 3: Handle case where response is wrapped in outer quotes
     if (!analysisJson && (analysisText.startsWith('"') && analysisText.endsWith('"'))) {
-        try {
-            const unquotedText = JSON.parse(analysisText); // This parses the outer quotes
-            if (typeof unquotedText === 'string') { // And if the content IS a string that IS json
-                 analysisJson = tryParseJson(unquotedText, "tertiary (unquote then parse)");
-            }
-        } catch (e) {
-            console.warn("Tertiary parsing (unquoting outer string) failed:", e.message);
+      try {
+        const unquotedText = JSON.parse(analysisText); // Parse outer quotes
+        if (typeof unquotedText === 'string') {
+          const cleanedUnquoted = cleanJsonText(unquotedText);
+          analysisJson = tryParseJson(cleanedUnquoted, "tertiary (unquote then clean)");
         }
+      } catch (e) {
+        console.warn("Tertiary parsing (unquoting outer string) failed:", e.message);
+      }
     }
 
     if (!analysisJson) {
-      console.error("All attempts to parse AI response JSON failed.", analysisText);
+      console.error("All attempts to parse AI response JSON failed. Raw response:", analysisText);
       return {
         success: false,
-        error: "Failed to parse AI analysis. The response was not valid JSON even after cleaning attempts.",
+        error: "Failed to parse AI analysis. The response was not valid JSON even after enhanced cleaning attempts.",
         rawResponse: analysisText // Include raw response for debugging
       };
     }
@@ -378,17 +393,25 @@ Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et c
     // Combine system and user prompts
     const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
-    const response = await together.images.create({
-      model: "black-forest-labs/FLUX.1-schnell",
+    // FIXED: Use correct size parameter for GPT-image-1
+    const response = await openai.images.generate({
+      model: "gpt-image-1",
       prompt: combinedPrompt,
-      n: 1,
-      height: 512,
-      width: 512,
-    })
+      n: 1, // GPT-image-1 supports only 1 image per request
+      // size: "1024x1024", // FIXED: Use supported size (was "512x512")
+      // quality: "high", // Options: "standard", "high"
+      // output_format: "png", // Options: "png", "jpeg"
+      // background: "auto", // Options: "auto", "transparent", "white", "black"
+      // moderation: "auto", // Content moderation
+    });
+    console.log("Image generation response:", response);
+    console.log("Generated image URL:", response.data[0].url);
+    console.log("Generated image base64:", response.data[0].b64_json ? "Available" : "Not available");
 
     return {
       success: true,
-      generatedImage: response.data[0].url,
+      generatedImage: response.data[0].b64_json,
+      revisedPrompt: response.data[0].revised_prompt, // GPT-image-1 provides this
       lightingAnalysis: {
         assessment: lightingAnalysis.assessment,
         statistics: {
