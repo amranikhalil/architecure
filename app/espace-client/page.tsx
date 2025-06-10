@@ -1,7 +1,6 @@
 "use client"
-
 import { useState, useEffect } from "react"
-import { Upload, Scan, AlertCircle, Check, Loader2, Sun } from "lucide-react"
+import { Upload, Scan, AlertCircle, Check, Loader2, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -148,8 +147,8 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
         });
         setBeforeAfterImages({
           before: previewUrl,
-          after: "/placeholder.jpg",
-        })
+          after: null // Set to null initially to show loading spinner
+        });
         setIsGenerating(true)
         try {
           const descriptionImageOriginale = result.analysis.descriptionImageOriginale || "Description non fournie";

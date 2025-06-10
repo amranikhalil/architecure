@@ -363,6 +363,9 @@ ${lightingAnalysis.assessment}`;
     const userPrompt = `Description de l'espace original:
 ${descriptionImageOriginale}
 
+Problèmes identifiés:
+${problemsSummary}
+
 Créez une visualisation photoréaliste qui intègre les améliorations suivantes:
 
 ${improvementMapping}
@@ -405,12 +408,18 @@ Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et c
       // moderation: "auto", // Content moderation
     });
     console.log("Image generation response:", response);
-    console.log("Generated image URL:", response.data[0].url);
-    console.log("Generated image base64:", response.data[0].b64_json ? "Available" : "Not available");
+
+    // Create a data URI from the base64 string so it can be used directly in an <img> src
+    const generatedImage = response.data[0].b64_json 
+      ? `data:image/png;base64,${response.data[0].b64_json}`
+      : null;
+
+    console.log("Generated image URL:", response.data[0].url); // Will be undefined, which is expected
+    console.log("Generated image base64:", generatedImage ? "Available and formatted" : "Not available");
 
     return {
       success: true,
-      generatedImage: response.data[0].b64_json,
+      generatedImage: generatedImage,
       revisedPrompt: response.data[0].revised_prompt, // GPT-image-1 provides this
       lightingAnalysis: {
         assessment: lightingAnalysis.assessment,
