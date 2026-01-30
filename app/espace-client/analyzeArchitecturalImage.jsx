@@ -139,57 +139,78 @@ export async function analyzeArchitecturalImage(imageBase64) {
       ? imageBase64.split("base64,")[1]
       : imageBase64
 
-    // System prompt to set expectations without providing examples
-    const systemPrompt = `Vous êtes un expert en décoration d'intérieur et design d'espaces. Votre tâche est d'analyser des images d'espaces et de fournir des observations détaillées ainsi que des suggestions d'amélioration en format JSON structuré. 
-Vos observations doivent être pertinentes, spécifiques à l'image et fondées sur des principes de design. 
-Vos suggestions doivent être créatives, réalisables et appropriées au contexte visible dans l'image.
-Vous devez toujours répondre avec un JSON valide sans aucun texte avant ou après.`;
+   const systemPrompt = `STRICT RULES (read first):
+- Reproduce the attached 2D floor plan as a 3D model with exact dimensions and furniture placement.
+- DO NOT add, remove, or move any elements not present in the 2D plan.
+- Use only the items and layout shown in the analysis data.
+- Doors and windows must be placed exactly as specified.
+- No creative interpretation or visual embellishments.
+- Maintain architectural accuracy and proportions. No omissions.
 
-    // User prompt without examples
-    const userPrompt = `Analysez cette image d'espace et fournissez un objet JSON comprenant:
+Your only goal is to generate a 3D view that matches the 2D plan exactly, suitable for construction reference.`;
 
-1. "descriptionImageOriginale": Décris précisément cette image pour une génération IA fidèle, en donnant dimensions, perspective, style, disposition, couleurs, ambiance, orientation, etc..
+// Ultra-strict user prompt for 2D-to-3D fidelity
+const userPrompt = `You must convert the attached 2D floor plan into a 3D representation with absolute precision.
 
-2. "problems": un tableau d'au moins 3 observations constructives. Chaque élément doit contenir:
-   - "title": un titre court et précis du problème
-   - "description": une explication détaillée du problème
-   - "severity": évaluation de l'importance ("faible", "moyen", ou "élevé")
+STRICT REQUIREMENTS:
+1. Reproduce the 2D plan exactly, including all dimensions, furniture, and architectural elements.
+2. Do NOT add, remove, or move any elements not present in the plan.
+3. Use only the items, layout, and positions shown in the analysis data.
+4. Doors and windows must match the plan in size and placement.
+5. No creative interpretation, style changes, or visual embellishments.
+6. Output must be a valid JSON object only, with all measurements and proportions preserved.
 
-3. "solutions": un tableau avec au moins une solution pour chaque problème identifié. Chaque solution doit avoir:
-   - "title": un titre clair
-   - "description": une explication détaillée de la solution
-   - "cost": estimation du coût ("faible", "moyen", "élevé")
-   - "implementationTime": temps de mise en œuvre estimé ("jours", "semaines", "mois")
-   - "impact": impact prévu de la solution ("faible", "moyen", "élevé")
+Return a JSON object with fields:
+{
+  "architecturalAnalysis": {
+    "drawingType": "Type of drawing (e.g., floor plan)",
+    "scale": "Drawing scale or estimate",
+    "orientation": "Cardinal orientation (N/E/S/W)",
+    "dimensionalData": {
+      "overallDimensions": "Overall length, width, area",
+      "roomDimensions": "Each room with precise measurements",
+      "wallThickness": "Wall thickness",
+      "doorWidths": "Door widths",
+      "windowDimensions": "Window sizes and positions"
+    }
+  },
+  "precise3DDescription": {
+    "basePrompt": "Detailed 3D description using only the plan's data",
+    "structuralElements": "Walls, columns, beams, stairs, with exact positions",
+    "materialSpecifications": "Materials for floors, walls, ceilings, doors, windows",
+    "lightingAndAmbiance": "Natural and artificial lighting as shown",
+    "perspectiveInstructions": "Camera/viewpoint for 3D rendering"
+  },
+  "qualityAssurance": {
+    "dimensionalAccuracy": "Checklist for exact proportions",
+    "architecturalStandards": "Compliance with standard codes",
+    "visualConsistency": "Consistent style and materials"
+  },
+  "enhanced3DPrompt": "A single, strict instruction for 3D AI: create an identical 3D representation, no additions, no omissions, no creative interpretation."
+}`;
 
-Votre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou après.`;
-
-    // const response = await together.chat.completions.create({
-    //   model: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo",
-    //   max_tokens: 2048,
-    //   temperature: 0.3, // Slightly increased for more creative responses
-    //   messages: [
-    //     {
-    //       role: "system",
-    //       content: systemPrompt
-    //     },
-    //     {
-    //       role: "user",
-    //       content: [
-    //         {
-    //           type: "text",
-    //           text: userPrompt,
-    //         },
-    //         {
-    //           type: "image_url",
-    //           image_url: {
-    //             url: `data:image/jpeg;base64,${base64Image}`,
-    //           },
-    //         },
-    //       ],
-    //     },
-    //   ],
-    // })
+//       messages: [
+//         {
+//           role: "system",
+//           content: systemPrompt
+//         },
+//         {
+//           role: "user",
+//           content: [
+//             {
+//               type: "text",
+//               text: userPrompt,
+//             },
+//             {
+//               type: "image_url",
+//               image_url: {
+//                 url: `data:image/jpeg;base64,${base64Image}`,
+//               },
+//             },
+//           ],
+//         },
+//       ],
+//     })
     const response = await openai.chat.completions.create({
     model: "gpt-4o", // ou "gpt-4-vision-preview"
     messages: [
@@ -205,6 +226,7 @@ Votre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou ap
 
     const analysisText = response.choices[0].message.content;
     let analysisJson;
+    console.log("AI response text:", analysisText);
 
     // Enhanced JSON parsing with better error handling
     const tryParseJson = (text, attemptName) => {
@@ -273,19 +295,21 @@ Votre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou ap
     }
 
     // Validate the JSON structure has the required fields
-    if (!analysisJson.descriptionImageOriginale || 
-        !Array.isArray(analysisJson.problems) || 
-        !Array.isArray(analysisJson.solutions)) {
+    // if (!analysisJson.descriptionImageOriginale || 
+    //     !Array.isArray(analysisJson.problems) || 
+    //     !Array.isArray(analysisJson.solutions)) {
       
-      console.error("Invalid JSON structure received:", analysisJson);
+    //   console.error("Invalid JSON structure received:", analysisJson);
       
-      return {
-        success: false,
-        error: "AI response did not contain the expected JSON structure with descriptionImageOriginale, problems, and solutions.",
-        receivedStructure: Object.keys(analysisJson).join(', '),
-        rawResponse: analysisText
-      };
-    }
+    //   return {
+    //     success: false,
+    //     error: "AI response did not contain the expected JSON structure with descriptionImageOriginale, problems, and solutions.",
+    //     receivedStructure: Object.keys(analysisJson).join(', '),
+    //     rawResponse: analysisText
+    //   };
+    // }
+    console.log("nepo")
+    console.log('analyses',analysisJson)
 
     return {
       success: true,
@@ -309,7 +333,7 @@ Votre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou ap
  * @param {string} descriptionImageOriginale Textual description of the original image.
  * @returns {Promise<object>} Object containing success status and generated image URL or error.
  */
-export async function generateImprovedVersion(imageBase64, problems, solutions, descriptionImageOriginale) {
+export async function generateImprovedVersion(imageBase64, problems, solutions, descriptionImageOriginale,analysis) {
   try {
     const together = new Together({
       apiKey: process.env.TOGETHER_API_KEY,
@@ -341,8 +365,8 @@ export async function generateImprovedVersion(imageBase64, problems, solutions, 
         console.log("Lighting Assessment from analyzeLighting:", lightingAnalysis.assessment);
     }
 
-    const problemsSummary = problems.map(p => p.title).join(", ")
-    const solutionsSummary = solutions.map(s => s.title).join(", ")
+    // const problemsSummary = problems.map(p => p.title).join(", ")
+    // const solutionsSummary = solutions.map(s => s.title).join(", ")
 
     // Enhanced system prompt with lighting information
     const systemPrompt = `Vous êtes un expert en design d'intérieur et visualisation 3D qui crée des rendus réalistes d'espaces améliorés.
@@ -356,77 +380,210 @@ Une analyse d'éclairage a été effectuée sur l'image originale, avec les rés
 ${lightingAnalysis.assessment}`;
 
     // Create problem-solution pairs mapping
-    const problemsList = problemsSummary.split(',').map(p => p.trim());
-    const solutionsList = solutionsSummary.split(',').map(s => s.trim());
+    // const problemsList = problemsSummary.split(',').map(p => p.trim());
+    // const solutionsList = solutionsSummary.split(',').map(s => s.trim());
     
     // Build problem-solution mapping with clearer instructions
-    let improvementMapping = "";
+    // let improvementMapping = "";
     
-    for (let i = 0; i < problemsList.length; i++) {
+    // for (let i = 0; i < problemsList.length; i++) {
       
-      const solution = i < solutionsList.length
-        ? solutionsList[i]
-        : "Amélioration générale de l'espace";
+    //   const solution = i < solutionsList.length
+    //     ? solutionsList[i]
+    //     : "Amélioration générale de l'espace";
       
-      improvementMapping += `${i+1}. Problème: "${problemsList[i]}" → Application visuelle: "${solution}"\n`;
-    }
+    //   improvementMapping += `${i+1}. Problème: "${problemsList[i]}" → Application visuelle: "${solution}"\n`;
+    // }
 
     // Enhanced user prompt with lighting instructions
-    const userPrompt = `Description de l'espace original:
-${descriptionImageOriginale}
+//     const userPrompt = `Description de l'espace original:
+// ${descriptionImageOriginale}
 
 
 
-Créez une visualisation photoréaliste qui intègre les améliorations suivantes:
+// Créez une visualisation photoréaliste qui intègre les améliorations suivantes:
 
-${improvementMapping}
+// ${improvementMapping}
 
-CONSIGNES IMPORTANTES:
-- Conservez exactement la même perspective, angle de vue et structure architecturale de base
-- Rendez les changements clairement visibles et harmonieux
-- La visualisation doit être photoréaliste et professionnelle
-- Respectez le style général de l'espace tout en l'améliorant
+// CONSIGNES IMPORTANTES:
+// - Conservez exactement la même perspective, angle de vue et structure architecturale de base
+// - Rendez les changements clairement visibles et harmonieux
+// - La visualisation doit être photoréaliste et professionnelle
+// - Respectez le style général de l'espace tout en l'améliorant
 
-AMÉLIORATIONS D'ÉCLAIRAGE SPÉCIFIQUES:
-- Zones vertes (${lightingAnalysis.lightingMap.bright.percentage}% de l'image): Maintenir le bon niveau d'éclairage existant
-- Zones jaunes (${lightingAnalysis.lightingMap.medium.percentage}% de l'image): Renforcer légèrement l'éclairage pour une meilleure visibilité
-- Zones rouges (${lightingAnalysis.lightingMap.dark.percentage}% de l'image): Ajouter des sources d'éclairage significatives pour éliminer les zones d'ombre
+// AMÉLIORATIONS D'ÉCLAIRAGE SPÉCIFIQUES:
+// - Zones vertes (${lightingAnalysis.lightingMap.bright.percentage}% de l'image): Maintenir le bon niveau d'éclairage existant
+// - Zones jaunes (${lightingAnalysis.lightingMap.medium.percentage}% de l'image): Renforcer légèrement l'éclairage pour une meilleure visibilité
+// - Zones rouges (${lightingAnalysis.lightingMap.dark.percentage}% de l'image): Ajouter des sources d'éclairage significatives pour éliminer les zones d'ombre
 
-Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et convaincant.`;
+// Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et convaincant.`;
 
-    // Log the prompts to verify lighting analysis usage
-    console.log("\n--- System Prompt for Image Generation ---");
-    console.log(systemPrompt);
-    console.log("--- User Prompt Lighting Instructions for Image Generation ---");
-    console.log(`AMÉLIORATIONS D'ÉCLAIRAGE SPÉCIFIQUES:
-- Zones vertes (${lightingAnalysis.lightingMap.bright.percentage}% de l'image): Maintenir le bon niveau d'éclairage existant
-- Zones jaunes (${lightingAnalysis.lightingMap.medium.percentage}% de l'image): Renforcer légèrement l'éclairage pour une meilleure visibilité
-- Zones rouges (${lightingAnalysis.lightingMap.dark.percentage}% de l'image): Ajouter des sources d'éclairage significatives pour éliminer les zones d'ombre`);
-    console.log("-----------------------------------------\n");
+//     // Log the prompts to verify lighting analysis usage
+//     console.log("\n--- System Prompt for Image Generation ---");
+//     console.log(systemPrompt);
+//     console.log("--- User Prompt Lighting Instructions for Image Generation ---");
+//     console.log(`AMÉLIORATIONS D'ÉCLAIRAGE SPÉCIFIQUES:
+// - Zones vertes (${lightingAnalysis.lightingMap.bright.percentage}% de l'image): Maintenir le bon niveau d'éclairage existant
+// - Zones jaunes (${lightingAnalysis.lightingMap.medium.percentage}% de l'image): Renforcer légèrement l'éclairage pour une meilleure visibilité
+// - Zones rouges (${lightingAnalysis.lightingMap.dark.percentage}% de l'image): Ajouter des sources d'éclairage significatives pour éliminer les zones d'ombre`);
+//     console.log("-----------------------------------------\n");
+//     console.log(analysis.enhanced3DPrompt)
+//     console.log(analysis)
 
-    // Combine system and user prompts
-    const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
+//     // Combine system and user prompts
+//     const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
+//     // Create the enhanced 3D generation prompt
+//     const enhanced3DPrompt = `
+// GÉNÉRATION DE VISUALISATION ARCHITECTURALE 3D:
 
+// ${analysis.enhanced3DPrompt}
+
+// SPÉCIFICATIONS TECHNIQUES DE LA PIÈCE:
+// - Nom de la pièce: ${analysis.architecturalAnalysis.roomName || 'Pièce'}
+// - Surface totale: ${analysis.architecturalAnalysis.area || 'Non spécifiée'}
+// - Dimensions: ${analysis.architecturalAnalysis.dimensions?.width || 'Largeur non spécifiée'} × ${analysis.architecturalAnalysis.dimensions?.length || 'Longueur non spécifiée'}
+
+// MOBILIER ET AMÉNAGEMENT:
+// ${analysis.architecturalAnalysis.furniture?.map(item => 
+//   `- ${item.quantity} ${item.type}${item.quantity > 1 ? 's' : ''}`
+// ).join('\n') || '- Aucun mobilier spécifié'}
+
+// POSITIONNEMENT DU MOBILIER:
+// ${analysis.precise3DDescription.furniture?.map(item => 
+//   `- ${item.type}: ${item.position}`
+// ).join('\n') || '- Positionnement standard'}
+
+// SPÉCIFICATIONS ARCHITECTURALES:
+// - Hauteur sous plafond: ${analysis.precise3DDescription.height || '2.7m (standard)'}
+// - Épaisseur des murs: ${analysis.precise3DDescription.details?.wallThickness || '200mm (standard)'}
+// - Matériaux de construction: ${analysis.precise3DDescription.details?.constructionMaterial || 'Matériaux standards'}
+// - Position des fenêtres: ${analysis.architecturalAnalysis.features?.windowPosition || 'À déterminer selon le plan'}
+// - Position des portes: ${analysis.architecturalAnalysis.features?.doorPosition || 'À déterminer selon le plan'}
+
+// QUALITÉ DE RENDU:
+// - Qualité: Photoréaliste, qualité visualisation architecturale professionnelle
+// - Éclairage: Lumière naturelle du jour avec ombres douces, éclairage architectural professionnel
+// - Caméra: Vue en perspective montrant l'aménagement complet de l'espace
+// - Résolution: Haute définition adaptée pour présentation architecturale
+// - Style: Visualisation architecturale propre et professionnelle
+// - Matériaux: Textures et finitions réalistes appropriées au type de bâtiment
+
+// EXIGENCES DE PRÉCISION:
+// - Maintenir les proportions exactes du plan 2D: ${analysis.architecturalAnalysis.dimensions?.width || 'Largeur'} × ${analysis.architecturalAnalysis.dimensions?.length || 'Longueur'}
+// - Préserver tous les agencements de pièces et connexions comme indiqué sur le dessin original
+// - Positionner portes et fenêtres exactement comme spécifié dans le plan 2D
+// - Appliquer les hauteurs de plafond standard et conventions architecturales
+// - Assurer l'intégrité structurelle et détails de construction réalistes
+
+// CONTRÔLE QUALITÉ:
+// - ${analysis.qualityAssurance.dimensionCheck || 'Vérifier que toutes les dimensions correspondent au plan 2D'}
+// - ${analysis.qualityAssurance.materialCheck || 'Attribuer des textures réalistes à toutes les surfaces'}
+// - ${analysis.qualityAssurance.structuralAccuracy || 'Confirmer que le positionnement correspond à lagencement'}
+
+// QUALITÉ VISUELLE:
+// - Style de rendu architectural professionnel
+// - Éclairage équilibré avec ambiance naturelle
+// - Présentation propre et épurée
+// - Matériaux et textures réalistes
+// - Angle de vue optimal pour mettre en valeur l'agencement de l'espace
+
+// Générer une visualisation architecturale 3D précise qui pourrait être utilisée comme référence de construction, en maintenant une fidélité absolue au dessin architectural 2D original.
+// `;
+console.log('nepoo')
+console.log('base64Image',base64Image)
+// console.log("Enhanced 3D Prompt for Image Generation:", enhanced3DPrompt);
+const newprop=`Create a stunning, photorealistic 3D architectural visualization that looks like a high-end interior design render.
+
+TECHNICAL REQUIREMENTS:
+- Use EXACT dimensions and positions from the analysis
+- Maintain architectural accuracy and proportions
+- Include proper lighting and shadows
+- Show materials and textures realistically
+
+VISUAL STYLE:
+- Modern, clean architectural photography style
+- Soft, natural lighting with subtle shadows
+- Neutral color palette with warm accents
+- Professional interior design aesthetic
+- Isometric or 3/4 perspective view
+- High-end architectural visualization quality
+
+ANALYSIS DATA:
+${JSON.stringify(analysis, null, 2)}
+
+STRICT RULES:
+...
+- Render the scene from a wide-angle camera, slightly above eye level, positioned to show the entire room and all features.
+- Use bright, natural daylight. Make the image full of vibrant, realistic colors.
+- The style should be photorealistic, lively, and inviting, like a professional interior design magazine photo.
+- Do not crop or cut off furniture or features; everything should be visible.
+...
+1. DO NOT add any elements not mentioned in the analysis
+2. Use EXACT dimensions provided
+3. Position elements precisely as specified
+4. Maintain proper scale relationships
+5. Include all specified openings (doors/windows)
+6. Respect the functional zoning described
+
+Generate a single, cohesive 3D interior view that could serve as a construction reference.`;;
+
+console.log('newprop',newprop)
+console.log("Analysis Object:", analysis);
+
+ 
+
+    // first model
+    //  const response = await together.images.create({
+    //   model: "black-forest-labs/FLUX.1-schnell",
+    //   prompt: newprop,
+    //   n: 1,
+    //   height: 512,
+    //   width: 512,
+    // })
+    //  const  generatedImage = response.data[0].url
+
+// const response = await together.images.create({
+//   model: "black-forest-labs/FLUX.1-depth",
+//   prompt: "Cats eating popcorn",
+//   steps: 10,
+//   n: 4
+// });
+// const  generatedImage = response.data[0].b64_json
+
+    // return {
+    //   success: true,
+    //   generatedImage: response.data[0].url,
     // FIXED: Use correct size parameter for GPT-image-1
-    const response = await openai.images.generate({
-      model: "gpt-image-1",
-      prompt: combinedPrompt,
-      n: 1, // GPT-image-1 supports only 1 image per request
-      // size: "1024x1024", // FIXED: Use supported size (was "512x512")
-      // quality: "high", // Options: "standard", "high"
-      // output_format: "png", // Options: "png", "jpeg"
-      // background: "auto", // Options: "auto", "transparent", "white", "black"
-      // moderation: "auto", // Content moderation
-    });
-    console.log("Image generation response:", response);
 
-    // Create a data URI from the base64 string so it can be used directly in an <img> src
-    const generatedImage = response.data[0].b64_json 
-      ? `data:image/png;base64,${response.data[0].b64_json}`
-      : null;
+    // const response = await openai.images.generate({
+    //   model: "gpt-image-1",
+    //  prompt: newprop,
+    //   n: 1,
+    //   size: "1024x1024", // Reduce resolution
+    //   quality: "low", // Lower quality level
+    //   output_format: "jpeg" // Smaller output format
+    // });
+    // console.log("Image generation response:", response);
+
+    // // Create a data URI from the base64 string so it can be used directly in an <img> src
+    // const generatedImage = response.data[0].b64_json 
+    //   ? `data:image/png;base64,${response.data[0].b64_json}`
+    //   : null;
+    const response = await openai.images.generate({
+            model: "dall-e-3", // or "dall-e-2" if you prefer
+      prompt: newprop,
+      n: 1, // Number of images
+      size: "1024x1024", // Available sizes: "256x256", "512x512", "1024x1024" for DALL-E 2
+                          // For DALL-E 3: "1024x1024", "1792x1024", "1024x1792"
+      response_format: "url", // "url" or "b64_json"
+      quality: "standard", // "standard" or "hd" (DALL-E 3 only)
+      style: "vivid" // "vivid" or "natural" (DALL-E 3 only)
+        });
+       const generatedImage =  response.data[0].url
 
     console.log("Generated image URL:", response.data[0].url); // Will be undefined, which is expected
     console.log("Generated image base64:", generatedImage ? "Available and formatted" : "Not available");
+    console.log(generatedImage)
 
     return {
       success: true,

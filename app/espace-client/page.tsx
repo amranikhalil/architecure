@@ -34,9 +34,31 @@ interface Solution {
 }
 
 interface AnalysisResult {
-  descriptionImageOriginale: string;
-  problems: Problem[];
-  solutions: Solution[];
+  architecturalAnalysis: {
+    drawingType: string;
+    scale: string;
+    orientation: string;
+    dimensionalData: {
+      overallDimensions: string;
+      roomDimensions: string;
+      wallThickness: string;
+      doorWidths: string;
+      windowDimensions: string;
+    };
+  };
+  precise3DDescription: {
+    basePrompt: string;
+    structuralElements: string;
+    materialSpecifications: string;
+    lightingAndAmbiance: string;
+    perspectiveInstructions: string;
+  };
+  qualityAssurance: {
+    dimensionalAccuracy: string;
+    architecturalStandards: string;
+    visualConsistency: string;
+  };
+  enhanced3DPrompt: string;
 }
 
 // Define expected return type for analyzeArchitecturalImage
@@ -83,9 +105,10 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
   // Store original inputs for regeneration
   const [originalInputs, setOriginalInputs] = useState<{
     imageBase64: string;
-    problems: Problem[];
-    solutions: Solution[];
-    descriptionImageOriginale: string;
+    architecturalAnalysis: AnalysisResult['architecturalAnalysis'];
+    precise3DDescription: AnalysisResult['precise3DDescription'];
+    qualityAssurance: AnalysisResult['qualityAssurance'];
+    enhanced3DPrompt: string;
   } | null>(null);
 
   // State for heatmap
@@ -141,9 +164,10 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
         // Store inputs for regeneration
         setOriginalInputs({
           imageBase64: previewUrl,
-          problems: result.analysis.problems,
-          solutions: result.analysis.solutions,
+          architecturalAnalysis: result.analysis.architecturalAnalysis,
+          precise3DDescription: result.analysis.precise3DDescription,
           descriptionImageOriginale: result.analysis.descriptionImageOriginale || "Description non fournie",
+          enhanced3DPrompt: result.analysis.enhanced3DPrompt || "Prompt non fourni",
         });
         setBeforeAfterImages({
           before: previewUrl,
@@ -154,9 +178,10 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
           const descriptionImageOriginale = result.analysis.descriptionImageOriginale || "Description non fournie";
           const improvedResult = await generateImprovedVersion(
             previewUrl,
-            result.analysis.problems,
-            result.analysis.solutions,
-            descriptionImageOriginale
+            result.analysis.architecturalAnalysis,
+            result.analysis.precise3DDescription,
+            descriptionImageOriginale,
+            result.analysis
           ) as GenerateImageResponse
           if (improvedResult.success) {
             setBeforeAfterImages(prev => ({
@@ -191,11 +216,40 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
     } finally {
       setIsAnalyzing(false)
     }
-  }
+  };
+  const directprompt=`
+  Kitchen Layout Description:
+Dimensions: Rectangular kitchen measuring approximately 410cm x 370cm (4.1m x 3.7m)
+Layout Type: L-shaped kitchen with integrated dining area
+Kitchen Counter and Appliances (along top and right walls):
 
+Upper wall: Linear counter running the full width with built-in appliances
+From left to right: Built-in oven/microwave unit, double-bowl sink with drainboard, built-in stovetop/cooktop (2 burners shown)
+Right wall: Additional counter space extending perpendicular to form the L-shape
+All counters appear to be standard height (approximately 90cm) with upper and lower cabinets
+
+Dining Area:
+
+Rectangular dining table positioned in the center-left area of the kitchen
+Four chairs arranged around the table (2 on each long side)
+Table oriented parallel to the longest wall
+
+Architectural Elements:
+
+Single doorway entrance located on the bottom wall (approximately centered)
+Quarter-circle arc in bottom-right corner indicating door swing clearance
+Clean, modern layout with efficient work triangle between sink, cooktop, and prep areas
+
+Surface Area: Total floor space of 15.17 square meters as indicated on the plan
+  `
   const regenerateImprovedVersion = async () => {
     if (!originalInputs) {
       setError("Original analysis data is not available for regeneration.");
+      return;
+    }
+    if (!originalInputs.enhanced3DPrompt) {
+      console.log(originalInputs)
+      setError("Analysis data is missing the enhanced 3D prompt. Please re-analyze the image.");
       return;
     }
 
@@ -205,9 +259,10 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
     try {
       const improvedResult = await generateImprovedVersion(
         originalInputs.imageBase64,
-        originalInputs.problems,
-        originalInputs.solutions,
-        originalInputs.descriptionImageOriginale
+        originalInputs.architecturalAnalysis,
+        originalInputs.precise3DDescription,
+        originalInputs.descriptionImageOriginale,
+        originalInputs // Pass the whole analysis object for enhanced3DPrompt
       ) as GenerateImageResponse;
 
       if (improvedResult.success) {
@@ -362,16 +417,16 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="problems">
+            <Tabs defaultValue="architecturalAnalysis">
               <TabsList className="mb-4 grid w-full grid-cols-4">
-                <TabsTrigger value="problems">Identified Problems</TabsTrigger>
-                <TabsTrigger value="solutions">Recommended Solutions</TabsTrigger>
+                <TabsTrigger value="architecturalAnalysis">Identified Problems</TabsTrigger>
+                <TabsTrigger value="precise3DDescription">Recommended Solutions</TabsTrigger>
                 <TabsTrigger value="visualization">Before & After</TabsTrigger>
                 <TabsTrigger value="heatmap">Light Heatmap</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="problems" className="space-y-4">
-                {analysis.problems.map((problem, index) => (
+              {/* <TabsContent value="architecturalAnalysis" className="space-y-4">
+                {analysis.architecturalAnalysis.map((problem, index) => (
                   <div key={index} className="flex items-start gap-4 p-4 border rounded-lg">
                     <div className={`rounded-full p-2 mt-1 ${
                       problem.severity === 'high' 
@@ -399,10 +454,10 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
                     </div>
                   </div>
                 ))}
-              </TabsContent>
+              </TabsContent> */}
 
-              <TabsContent value="solutions" className="space-y-4">
-                {analysis.solutions.map((solution, index) => (
+              {/* <TabsContent value="precise3DDescription" className="space-y-4">
+                {analysis.precise3DDescription.map((solution, index) => (
                   <div key={index} className="flex items-start gap-4 p-4 border rounded-lg">
                     <div className="rounded-full bg-green-100 text-green-700 p-2 mt-1">
                       <Check className="h-5 w-5" />
@@ -436,7 +491,7 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
                     </div>
                   </div>
                 ))}
-              </TabsContent>
+              </TabsContent> */}
 
               <TabsContent value="visualization">
                 {beforeAfterImages ? (
@@ -458,12 +513,30 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
                         </div>
                       )}
                       {(!isGenerating || beforeAfterImages.after?.includes('placeholder.jpg')) && beforeAfterImages.after && (
-                         <img 
-                           src={beforeAfterImages.after} 
-                           alt="Improved space" 
-                           className="w-full rounded-lg shadow-md"
-                         />
-                      )}
+  <>
+    <img 
+      src={beforeAfterImages.after} 
+      alt="Improved space" 
+      className="w-full rounded-lg shadow-md"
+    />
+    {/* Download button for improved image */}
+    {!beforeAfterImages.after.includes('placeholder.jpg') && (
+      <a
+        href={beforeAfterImages.after}
+        download={
+          `improved-3d-visualization-${new Date().toISOString().slice(0,10)}.jpg`
+        }
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block w-full mt-3"
+      >
+        <Button type="button" variant="secondary" className="w-full">
+          Download 3D Image
+        </Button>
+      </a>
+    )}
+  </>
+)}
                        <Button 
                         onClick={regenerateImprovedVersion} 
                         disabled={isGenerating || !originalInputs}
@@ -480,8 +553,14 @@ export default function ArchitecturalAIAnalysis(): React.ReactElement {
                       </Button>
                     </div>
                   </div>
-                ) : (
+                ) : (<>
+                       <Button 
+                        onClick={regenerateImprovedVersion} 
+                        disabled={isGenerating || !originalInputs}
+                        className="w-full mt-4"
+                        ></Button>
                   <p>Visualization will appear here once analysis is complete.</p>
+                        </>
                 )}
               </TabsContent>
               
