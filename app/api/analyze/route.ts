@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Together from 'together-ai';
+import OpenAI from 'openai';
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,63 +8,64 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing imageBase64' }, { status: 400 });
     }
 
-    const together = new Together({
-      apiKey: process.env.TOGETHER_API_KEY,
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
     });
 
     const base64Image = imageBase64.includes('base64,')
       ? imageBase64.split('base64,')[1]
       : imageBase64;
 
-    const systemPrompt = `Vous êtes un expert en décoration d'intérieur et design d'espaces. Votre tâche est d'analyser des images d'espaces et de fournir des observations détaillées ainsi que des suggestions d'amélioration en format JSON structuré. \nVos observations doivent être pertinentes, spécifiques à l'image et fondées sur des principes de design. \nVos suggestions doivent être créatives, réalisables et appropriées au contexte visible dans l'image.\nVous devez toujours répondre avec un JSON valide sans aucun texte avant ou après.`;
+    const systemPrompt = `Vous êtes un expert en décoration d'intérieur. Répondez UNIQUEMENT avec un objet JSON valide.`;
 
-    const userPrompt = `Analysez cette image d'espace et fournissez un objet JSON comprenant:\n\n1. "descriptionImageOriginale": une brève description objective de l'espace visualisé.\n\n2. "problems": un tableau d'au moins 3 observations constructives. Chaque élément doit contenir:\n   - "title": un titre court et précis du problème\n   - "description": une explication détaillée du problème\n   - "severity": évaluation de l'importance ("faible", "moyen", ou "élevé")\n\n3. "solutions": un tableau avec au moins une solution pour chaque problème identifié. Chaque solution doit avoir:\n   - "title": un titre clair\n   - "description": une explication détaillée de la solution\n   - "cost": estimation du coût ("faible", "moyen", "élevé")\n   - "implementationTime": temps de mise en œuvre estimé ("jours", "semaines", "mois")\n   - "impact": impact prévu de la solution ("faible", "moyen", "élevé")\n\nVotre réponse doit être UNIQUEMENT l'objet JSON valide, sans texte avant ou après.`;
+    const userPrompt = `Analysez cette image d'espace et fournissez un objet JSON comprenant:
+    1. "descriptionImageOriginale": une brève description objective.
+    2. "problems": un tableau d'au moins 3 observations (title, description, severity).
+    3. "solutions": un tableau avec solutions (title, description, cost, implementationTime, impact).`;
 
-    const response = await together.chat.completions.create({
-      model: 'meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo',
-      max_tokens: 2048,
-      temperature: 0.3,
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: "system", content: systemPrompt },
         {
-          role: 'user',
+          role: "user",
           content: [
-            { type: 'text', text: userPrompt },
-            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
+            { type: "text", text: userPrompt },
+            {
+              type: "image_url",
+              image_url: { url: `data:image/jpeg;base64,${base64Image}`, detail: "low" },
+            },
           ],
         },
       ],
+      response_format: { type: "json_object" },
     });
 
-    const analysisText = response.choices[0].message.content;
-    let analysisJson: any = null;
-
-    // Try to parse JSON from the response
-    try {
-      // Try direct parse
-      analysisJson = JSON.parse(analysisText);
-    } catch {
-      // Try to extract JSON block
-      const jsonPattern = /\{[\s\S]*\}/;
-      const jsonMatch = analysisText.match(jsonPattern);
-      if (jsonMatch && jsonMatch[0]) {
-        try {
-          analysisJson = JSON.parse(jsonMatch[0]);
-        } catch {}
-      }
+    // --- LA CORRECTION EST ICI ---
+    const rawContent = response.choices[0].message.content;
+    if (!rawContent) {
+        return NextResponse.json({ success: false, error: "L'IA n'a pas renvoyé de contenu" }, { status: 500 });
     }
 
-    if (!analysisJson) {
-      return NextResponse.json({ success: false, error: 'Failed to parse AI response', rawResponse: analysisText }, { status: 500 });
-    }
+    // On parse une seule fois
+    const analysisJson = JSON.parse(rawContent);
 
-    // Validate structure
-    if (!analysisJson.descriptionImageOriginale || !Array.isArray(analysisJson.problems) || !Array.isArray(analysisJson.solutions)) {
-      return NextResponse.json({ success: false, error: 'AI response missing required fields', receivedStructure: Object.keys(analysisJson), rawResponse: analysisText }, { status: 500 });
+    // Validation simple de la structure
+    if (!analysisJson.descriptionImageOriginale || !Array.isArray(analysisJson.problems)) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Structure JSON invalide', 
+        rawResponse: rawContent 
+      }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, analysis: analysisJson });
+
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || 'Server error', stack: error.stack }, { status: 500 });
+    console.error("Erreur API:", error);
+    return NextResponse.json({ 
+        success: false, 
+        error: error.message || 'Server error' 
+    }, { status: 500 });
   }
-} 
+}
