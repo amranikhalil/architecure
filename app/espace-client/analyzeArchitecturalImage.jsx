@@ -397,15 +397,14 @@ Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et c
     const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
     // FIXED: Use correct size parameter for GPT-image-1
+  // 3. Appel à OpenAI DALL-E 3
     const response = await openai.images.generate({
-      model: "gpt-image-1",
+      model: "dall-e-3", // Le modèle correct
       prompt: combinedPrompt,
-      n: 1, // GPT-image-1 supports only 1 image per request
-      // size: "1024x1024", // FIXED: Use supported size (was "512x512")
-      // quality: "high", // Options: "standard", "high"
-      // output_format: "png", // Options: "png", "jpeg"
-      // background: "auto", // Options: "auto", "transparent", "white", "black"
-      // moderation: "auto", // Content moderation
+      n: 1,
+      size: "1024x1024",
+      quality: "standard", 
+      response_format: "b64_json", // Pour récupérer la base64 directement
     });
     console.log("Image generation response:", response);
 
@@ -413,6 +412,7 @@ Cette visualisation sera utilisée pour montrer un "avant/après" réaliste et c
     const generatedImage = response.data[0].b64_json 
       ? `data:image/png;base64,${response.data[0].b64_json}`
       : null;
+    
 
     console.log("Generated image URL:", response.data[0].url); // Will be undefined, which is expected
     console.log("Generated image base64:", generatedImage ? "Available and formatted" : "Not available");

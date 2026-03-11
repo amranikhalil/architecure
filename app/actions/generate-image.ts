@@ -59,13 +59,13 @@ export async function generateImage(prompt, n = 1) {
     
     // Using a confirmed working model
     console.log("Sending request to Together API with:", {
-      model: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo", // Updated model name
+      model: "meta-llama/Llama-3.2-70B-Instruct", // Updated model name
       prompt: prompt,
       n: numImages
     });
 
     const response = await together.images.generate({ // Using .generate() instead of .create()
-      model: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo", // Updated model name
+      model: "meta-llama/Llama-3.2-70B-Instruct", // Updated model name
       prompt: prompt,
       n: numImages
     });
