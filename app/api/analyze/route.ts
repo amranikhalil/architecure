@@ -21,7 +21,9 @@ export async function POST(req: NextRequest) {
     const userPrompt = `Analysez cette image d'espace et fournissez un objet JSON comprenant:
     1. "descriptionImageOriginale": une brève description objective.
     2. "problems": un tableau d'au moins 3 observations (title, description, severity).
-    3. "solutions": un tableau avec solutions (title, description, cost, implementationTime, impact).`;
+    3. "solutions": un tableau avec solutions (title, description, cost, implementationTime, impact).
+    
+    IMPORTANT: Les champs 'cost', 'severity' et 'impact' doivent être des chaînes de caractères avec les valeurs UNIQUEMENT parmi: 'high', 'medium', ou 'low'. Par exemple: "cost": "high", "impact": "medium". PAS de nombres.`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
