@@ -17,7 +17,7 @@ export async function analyzeLighting(imageBase64) {
     // For server-side Node.js environment
     // We'll use the 'canvas' package which should be installed via npm
     // npm install canvas
-    const { createCanvas, loadImage } = require('canvas');
+    const { createCanvas, loadImage } = require('@napi-rs/canvas');
     
     // Load the image
     const img = await loadImage(imageBase64);
