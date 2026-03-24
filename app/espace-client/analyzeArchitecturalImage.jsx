@@ -320,15 +320,20 @@ export async function generateImprovedVersion(imageBase64, problems, solutions, 
       : imageBase64
 
     // First analyze the lighting in the original image
-    const lightingAnalysis = await analyzeLighting(`data:image/jpeg;base64,${base64Image}`);
+    let lightingAnalysis = await analyzeLighting(`data:image/jpeg;base64,${base64Image}`);
     
-    // Add this check to ensure lightingAnalysis is valid
+    // Add this check to ensure lightingAnalysis is valid and provide fallback
     if (!lightingAnalysis || lightingAnalysis.success === false || !lightingAnalysis.lightingMap) {
-      console.error("Lighting analysis failed or returned an unexpected structure:", lightingAnalysis);
-      return {
-        success: false,
-        error: lightingAnalysis?.error || "Lighting analysis failed and did not return the expected structure.",
-        details: lightingAnalysis // Include the actual response for debugging
+      console.warn("Lighting analysis failed or returned an unexpected structure. Using fallback values.", lightingAnalysis);
+      lightingAnalysis = {
+        success: true,
+        lightingMap: {
+          bright: { percentage: 33 },
+          medium: { percentage: 34 },
+          dark: { percentage: 33 }
+        },
+        assessment: "Analyse d'éclairage indisponible. Application d'un éclairage neutre et équilibré.",
+        overlayImage: null
       };
     }
     
