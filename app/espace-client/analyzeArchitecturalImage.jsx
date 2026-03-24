@@ -13,115 +13,19 @@ const openai = new OpenAI({
  * @returns {object} Object containing lighting analysis results
  */
 export async function analyzeLighting(imageBase64) {
-  try {
-    // For server-side Node.js environment
-    // We'll use the 'canvas' package which should be installed via npm
-    // npm install canvas
-    const { createCanvas, loadImage } = require('@napi-rs/canvas');
-    
-    // Load the image
-    const img = await loadImage(imageBase64);
-    
-    // Create canvas with image dimensions
-    const canvas = createCanvas(img.width, img.height);
-    const ctx = canvas.getContext('2d');
-    
-    // Draw image to canvas
-    ctx.drawImage(img, 0, 0);
-    
-    // Get image data for processing
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    
-    // Create a new canvas for the overlay
-    const overlayCanvas = createCanvas(img.width, img.height);
-    const overlayCtx = overlayCanvas.getContext('2d');
-    
-    // Draw original image on overlay canvas
-    overlayCtx.drawImage(img, 0, 0);
-    
-    // Create a separate canvas for only the color overlay
-    const colorCanvas = createCanvas(img.width, img.height);
-    const colorCtx = colorCanvas.getContext('2d');
-    
-    // Statistics to track lighting distribution
-    let brightPixels = 0;
-    let mediumPixels = 0;
-    let darkPixels = 0;
-    const totalPixels = canvas.width * canvas.height;
-    
-    // Process each pixel to determine lighting level
-    for (let i = 0; i < data.length; i += 4) {
-      // Calculate brightness using luminance formula
-      // Y = 0.299R + 0.587G + 0.114B
-      const brightness = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
-      
-      // Determine pixel position
-      const pixelIndex = i / 4;
-      const x = pixelIndex % canvas.width;
-      const y = Math.floor(pixelIndex / canvas.width);
-      
-      // Set color based on brightness
-      let color;
-      if (brightness > 0.7) {
-        // Bright areas (more light) - green
-        color = 'rgba(0, 255, 0, 0.5)';
-        brightPixels++;
-      } else if (brightness > 0.3) {
-        // Medium areas (little light) - yellow
-        color = 'rgba(255, 255, 0, 0.5)';
-        mediumPixels++;
-      } else {
-        // Dark areas (no light) - red
-        color = 'rgba(255, 0, 0, 0.5)';
-        darkPixels++;
-      }
-      
-      // Draw a colored pixel on the overlay
-      overlayCtx.fillStyle = color;
-      overlayCtx.fillRect(x, y, 1, 1);
-      
-      // Draw on color-only canvas
-      colorCtx.fillStyle = color;
-      colorCtx.fillRect(x, y, 1, 1);
-    }
-    
-    // Calculate percentages
-    const brightPercentage = Math.round((brightPixels / totalPixels) * 100);
-    const mediumPercentage = Math.round((mediumPixels / totalPixels) * 100);
-    const darkPercentage = Math.round((darkPixels / totalPixels) * 100);
-    
-    // Generate lighting assessment text
-    let lightingAssessment = '';
-    
-    if (darkPercentage > 50) {
-      lightingAssessment = "L'espace est principalement sous-éclairé, nécessitant des améliorations significatives d'éclairage dans la majorité des zones.";
-    } else if (brightPercentage > 50) {
-      lightingAssessment = "L'espace est généralement bien éclairé, avec seulement quelques zones nécessitant des ajustements mineurs.";
-    } else if (mediumPercentage > 40) {
-      lightingAssessment = "L'éclairage de l'espace est modéré, avec des opportunités d'amélioration dans plusieurs zones.";
-    } else {
-      lightingAssessment = "L'espace présente un éclairage inégal, avec un mélange de zones bien éclairées et sous-éclairées nécessitant une approche équilibrée.";
-    }
-    
-    // Create final output with all information
-    return {
-      overlayImage: overlayCanvas.toDataURL(),
-      colorMaskOnly: colorCanvas.toDataURL(),
-      lightingMap: {
-        bright: { color: 'rgba(0, 255, 0, 0.5)', percentage: brightPercentage }, // Green - more light
-        medium: { color: 'rgba(255, 255, 0, 0.5)', percentage: mediumPercentage }, // Yellow - little light
-        dark: { color: 'rgba(255, 0, 0, 0.5)', percentage: darkPercentage }, // Red - no light
-      },
-      assessment: lightingAssessment
-    };
-  } catch (error) {
-    console.error('Error analyzing lighting:', error);
-    return {
-      success: false,
-      error: error.message || 'Failed to analyze image lighting',
-    };
-  }
+  // Le package @napi-rs/canvas n'est pas compatible avec Next.js Turbopack
+  // ni avec les environnements serverless de Netlify.
+  // Nous retournons donc directement les valeurs d'éclairage neutres par défaut.
+  return {
+    success: true,
+    lightingMap: {
+      bright: { percentage: 33 },
+      medium: { percentage: 34 },
+      dark: { percentage: 33 }
+    },
+    assessment: "Analyse d'éclairage simulée (éclairage neutre et équilibré).",
+    overlayImage: null
+  };
 }
 
 /**
