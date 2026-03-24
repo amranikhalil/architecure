@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { useAuth } from "@/lib/authContext"
+import { useRouter } from "next/navigation"
 
 export default function AuthModal({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState("")
@@ -11,6 +12,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(false)
 
   const { signIn, signUp } = useAuth()
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -20,7 +22,10 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
     if (isLogin) {
       const { error } = await signIn(email, password)
       if (error) setError(error.message)
-      else onClose()
+      else {
+        onClose()
+        router.push("/espace-client")
+      }
     } else {
       if (!name.trim()) {
         setError("Le nom est requis")
@@ -29,7 +34,10 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
       }
       const { error } = await signUp(email, password, name)
       if (error) setError(error.message)
-      else onClose()
+      else {
+        onClose()
+        router.push("/espace-client")
+      }
     }
     
     setLoading(false)
